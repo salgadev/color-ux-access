@@ -3,3 +3,4 @@ playwright
 pytest-playwright
 daltonlens
 openai
+python-dotenv
