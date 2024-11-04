@@ -6,6 +6,7 @@ target_website = "https://www.iflysouthern.com/"
 title = "Southern Airways"
 expected_title = re.compile(title)
 
+
 def test_iflysouthern_website(page: Page):
     try:
         page.goto(target_website)
@@ -20,10 +21,15 @@ def test_iflysouthern_website(page: Page):
         
         screenshot_path = take_screenshot(page, title)
         base64_image = image_to_base64(screenshot_path)
-        result = aria_image_analysis(base64_image, "What are the coordinates of the 'YOUR BOOKING' button?")
-        print(result)
-        button_coordinates = result.splitlines()[-1]
-        page.click(button_coordinates.split(',')[0], button_coordinates.split(',')[1])
+        ui_element_to_find = 'SELECT FROM'
+        prompt = f'What are the coordinates of the "{ui_element_to_find}" button? Respond in a dictionary with the keys x,y,reasoning'
+        aria_answer = aria_image_analysis(base64_image, prompt)
+        x, y, reasoning = extract_coordinates_and_reasoning(aria_answer)        
+        # result = find_element_coordinates(base64_image, 'YOUR BOOKING')
+        # for debugging only
+        print(x, y, reasoning)
+        
+        page.mouse.click(x, y)
         
     except Exception as e:
         print(f"Error: {e}")
