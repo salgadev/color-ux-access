@@ -1,10 +1,11 @@
 import argparse
 import base64
-from datetime import datetime
+import json
 import numpy as np
 import os
 import PIL
 
+from datetime import datetime
 from daltonlens import simulate
 from dotenv import load_dotenv
 from playwright.sync_api import Page, expect
@@ -93,8 +94,24 @@ def aria_image_analysis(base64_image, question):
             max_tokens=1024,
             top_p=1,
             stop=["<|im_end|>"]
-    )
+    )    
     return response.choices[0].message.content
+
+
+def extract_coordinates_and_reasoning(output):
+    # Remove the triple backticks and python syntax highlighting
+    output = output.replace('```python\n', '').replace('\n```', '')
+
+    # Parse the JSON string into a Python dictionary
+    data = json.loads(output)
+
+    # Extract the x, y coordinates and reasoning
+    x = data['x']
+    y = data['y']
+    reasoning = data['reasoning']
+
+    return x, y, reasoning
+
 
 def main():  
     parser = argparse.ArgumentParser(description="Ask ARIA about an image")
