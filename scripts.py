@@ -1,16 +1,48 @@
-import base64
-import os
 import argparse
+import base64
+from datetime import datetime
+import numpy as np
+import os
+import PIL
 
+from daltonlens import simulate
 from dotenv import load_dotenv
+from playwright.sync_api import Page, expect
 from openai import OpenAI
 
 
 load_dotenv()
 
+SCREENSHOT_FOLDER = 'screenshots'
 base_url = 'https://api.rhymes.ai/v1/'
 aria_api_key = os.environ['ARIA_API_KEY']
 allegro_api_key = os.environ['ALLEGRO_API_KEY']
+
+# Create simulators
+simulator = simulate.Simulator_Machado2009()
+severe_simulator = simulate.Simulator_Vienot1999()
+tritan_simulator = simulate.Simulator_Brettel1997()
+
+def take_screenshot(page: Page, test_name: str) -> str:
+    """Take a screenshot of the page and save it to the screenshot folder"""
+    screenshot_filename = f"{test_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+    screenshot_path = os.path.join(SCREENSHOT_FOLDER, screenshot_filename)
+    page.screenshot(path=screenshot_path)
+    return screenshot_path
+
+def simulate_cvd(image, simulator, deficiency, severity):
+    image_array = np.asarray(PIL.Image.open(image).convert('RGB'))
+    cvd_im = simulator.simulate_cvd(image_array, deficiency, severity)
+    cvd_file = PIL.Image.fromarray(cvd_im)
+    return cvd_file
+
+deficiency_config = {
+    'protan': {'simulator': simulator, 'severity': 0.8, 'deficiency': simulate.Deficiency.PROTAN},
+    'severe_protan': {'simulator': severe_simulator, 'severity': 1, 'deficiency': simulate.Deficiency.PROTAN},
+    'deutan': {'simulator': simulator, 'severity': 0.8, 'deficiency': simulate.Deficiency.DEUTAN},
+    'severe_deutan': {'simulator': severe_simulator, 'severity': 1, 'deficiency': simulate.Deficiency.DEUTAN},
+    'tritan': {'simulator': tritan_simulator, 'severity': 0.8, 'deficiency': simulate.Deficiency.TRITAN},
+}
 
 client = OpenAI(
     base_url=base_url,
