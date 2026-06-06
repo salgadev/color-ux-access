@@ -2,56 +2,61 @@
 
 > 🎯 **HF Build Small Hackathon** — Backyard AI track · ≤32B parameters · Deployed as a Hugging Face Space
 
-A Gradio web app that simulates how webpages look to people with color vision deficiencies (CVD) and uses a 32B VLM to audit WCAG accessibility issues — reporting findings against WCAG standards.
+A Gradio web app that uses a 32B vision-language model (VLM) to audit webpages for colorblind accessibility issues — simulating 10 types of color vision deficiency (CVD) and reporting WCAG 2.1 findings.
 
-**The person it serves:** Someone with CVD (8% of men, 0.5% of women). They encounter sites daily that use color alone to convey meaning — error states, required fields, status indicators — and get no feedback that something is wrong. Color-UX-Access lets them paste any URL and see both the CVD simulations and a VLM-generated WCAG accessibility report.
+**The person it serves:** Someone with CVD (8% of men, 0.5% of women). They encounter sites daily that use color alone to convey meaning — error states, required fields, status indicators. Color-UX-Access lets them upload a screenshot and see both CVD simulations and a VLM-generated WCAG accessibility report.
 
 ---
 
 ## Quick Start
 
 ```bash
-cd G:/AI/HERMES/color-ux-access
+git clone https://github.com/salgadev/color-ux-access.git
+cd color-ux-access
 
 # Install dependencies
 pip install -r requirements.txt
-playwright install --with-deps
 
-# Run locally
-python app.py
+# Run locally (Modal deployment for production)
+python app/app.py
 # → Opens http://localhost:7860
 ```
 
-**Requirements:** Python 3.11+, internet access (for VLM inference via HF Router API).
+**Requirements:** Python 3.11+, `HF_TOKEN` environment variable (get yours at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)).
 
 ---
 
 ## What It Does
 
-1. **Paste any URL** — Playwright captures a full-page screenshot
-2. **10 CVD simulations** — Protanopia, Deuteranopia, Tritanopia, Achromatopsia (full + partial variants)
+1. **Upload a screenshot** — capture any webpage with your OS screenshot tool, upload the image
+2. **10 CVD simulations** — Protanopia, Deuteranopia, Tritanopia, Achromatopsia (full + partial variants) via DaltonLens + colorspacious
 3. **32B VLM analysis** — CohereLabs/aya-vision-32b via HF Router API identifies color-accessibility issues
-4. **WCAG report** — Findings mapped to WCAG 2.1 criteria (1.4.1, 1.4.3, 1.4.6, 1.4.11)
+4. **WCAG report** — Findings mapped to WCAG 2.1 criteria (1.1.1, 1.4.1, 1.4.3, 1.4.11)
 
 ---
 
 ## Architecture
 
 ```
-URL → Playwright screenshot (PIL Image)
+User screenshot (OS capture tool)
+         ↓
+gr.File (type="binary") → bytes
          ↓
 ┌──────────────────────────────────────┐
-│  Gradio UI (single-file app.py)      │
-│  Mode toggle: HF Router / llama.cpp  │
+│  Gradio UI (Modal @asgi_app)         │
+│  Single sticky container             │
 └──────────────────────────────────────┘
          ↓
-CVD simulation (DaltonLens, 10 types) → Gallery of 10 images
-VLM inference (HF Router, 32B VLM)    → WCAG accessibility report
+upload_screenshot (CPU) → vlm_inference_fn (A10G GPU)
+         ↓
+HF Router API → CohereLabs/aya-vision-32b
+         ↓
+WCAG JSON report → Gradio JSON output
 ```
 
-**VLM:** CohereLabs/aya-vision-32b via `https://router.huggingface.co/v1` (OpenAI-compatible)
+**VLM:** CohereLabs/aya-vision-32b via `https://router.huggingface.co/v1` (OpenAI-compatible).
 
-**Local fallback:** Any vision GGUF model via llama.cpp server at `http://localhost:8080/v1`.
+**Local fallback:** Any vision GGUF model via llama.cpp server at `http://localhost:8080/v1` (see `vlm/vlm_inference_llama.py`).
 
 ---
 
@@ -68,14 +73,11 @@ This makes analysis robust against site-specific structure changes — we're tes
 ## Testing
 
 ```bash
-# Smoke tests (no GPU, no network)
-python -m pytest tests/test_smoke.py -v
-
-# Pipeline tests (full URL→report with mocked VLM)
-python -m pytest tests/test_pipeline.py -v
-
-# Full suite
+# Full TDD suite (14 passing tests)
 python -m pytest tests/ -v
+
+# Smoke tests only
+python -m pytest tests/test_smoke.py -v
 ```
 
 ---
@@ -91,25 +93,39 @@ python -m pytest tests/ -v
 5. Set `HF_TOKEN` in Space secrets (Settings → Variables and Secrets)
 6. Wait for build (~5 min) — app is live at `https://<space-name>.hf.space`
 
+### Modal (alternative)
+
+```bash
+modal deploy color_ux_access/modal_app.py
+```
+
 ---
 
 ## Project Structure
 
 ```
 color-ux-access/
-├── AGENTS.md                    ← Hackathon goals, bonus points, WCAG reference
-├── README.md                    ← This file
-├── app.py                       ← Gradio app (VLM currently mocked)
-├── vlm_inference.py             ← HF Router API: CohereLabs/aya-vision-32b
-├── vlm_inference_llama.py       ← Local llama.cpp fallback
-├── accessibility_report.py      ← WCAG report generator
-├── custom_theme.py              ← Gradio theme
+├── app/                        ← Gradio app + theme
+│   ├── app.py
+│   └── custom_theme.py
+├── color_ux_access/            ← Core package
+│   ├── capture.py              ← Screenshot capture (Playwright + PIL)
+│   └── modal_app.py            ← Modal ASGI deployment
+├── vlm/                        ← VLM inference backends
+│   ├── vlm_inference.py        ← HF Router: CohereLabs/aya-vision-32b
+│   ├── vlm_inference_llama.py  ← llama.cpp fallback
+│   └── accessibility_report.py ← WCAG report generator
+├── tests/                      ← TDD suite
+│   ├── test_smoke.py           ← Import + build smoke
+│   ├── test_capture.py         ← Screenshot capture
+│   ├── test_modal_app.py       ← Modal app structure
+│   └── test_gradio_binary.py   ← Gradio bytes/file regression
+├── docs/
+│   ├── AGENTS.md               ← Hackathon goals, WCAG reference
+│   └── BONUS_PLAN.md           ← Bonus point strategy
+├── .env.example                ← Environment variable template
 ├── requirements.txt
-├── BONUS_PLAN.md                ← Bonus point strategy (5 categories)
-├── scripts.py                   ← Legacy Rhymes.ai/Aria scripts (ignore)
-└── tests/
-    ├── test_smoke.py            ← Import + build smoke
-    └── test_pipeline.py         ← Full pipeline with mocked VLM
+└── README.md
 ```
 
 ---
@@ -118,9 +134,9 @@ color-ux-access/
 
 | Criterion | Name | What it covers |
 |-----------|------|---------------|
+| 1.1.1 | Non-text Content | Images, icons must have text alternatives |
 | 1.4.1 | Use of Color | Color cannot be the only means of conveying information |
 | 1.4.3 | Contrast (Minimum) | 4.5:1 normal text, 3:1 large text |
-| 1.4.6 | Contrast (Enhanced) | 7:1 normal text, 4.5:1 large text |
 | 1.4.11 | Non-text Contrast | 3:1 for UI components and graphical objects |
 
 ---
@@ -135,7 +151,7 @@ Per hackathon judging criteria:
 4. **Sharing is Caring** — Dev trace shared as HF Dataset
 5. **Field Notes** — Blog post or case study about what was built
 
-See `AGENTS.md` → Bonus Points for implementation options per category.
+See `docs/AGENTS.md` → Bonus Points for implementation options per category.
 
 ---
 
@@ -145,18 +161,11 @@ See `AGENTS.md` → Bonus Points for implementation options per category.
 |---------|-------|-------|
 | HuggingFace | $15,000 cash | Top awards |
 | OpenAI | $10,000 cash + $100 Codex credits | First 1,000 participants |
-| OpenBMB | $10,000 special awards | MiniCPM model projects (MiniCPM-V 4.6, MiniCPM-o 4.5) |
+| OpenBMB | $10,000 special awards | MiniCPM model projects |
 | NVIDIA | 2× RTX 5080 GPUs | Physical hardware |
 | Modal | $250 credits all + $20,000 winners | Every participant |
 
-See `AGENTS.md` → Hackathon Tracks & Prizes for full details.
-
----
-
-## Reuse References
-
-- **NARWALL** (`D:\CODE\narwall-selenium\`) — "test from perspective of assistive tech users" philosophy
-- **gradio-huggingface-space skill** (`G:\AI\HERMES\skills\gradio-huggingface-space\`) — Gradio patterns, CVD simulation, WCAG reporting
+See `docs/AGENTS.md` → Hackathon Tracks & Prizes for full details.
 
 ---
 
