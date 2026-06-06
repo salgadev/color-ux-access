@@ -63,7 +63,14 @@ WCAG JSON → Markdown report + CVD gallery
 **Sponsor prize eligibility:**
 - HuggingFace $15K (top project)
 - OpenBMB $5K track (MiniCPM-V 4.6 swap planned)
-- Modal $250 credits all
+- Modal $250 credits (all participants)
+- NVIDIA RTX 5080 ×2 ⚠️ _requirement unconfirmed — asking organizers_
+
+---
+
+## ⚠️ Pending
+
+- [ ] **Transfer Space to hackathon org** — `salgadev/color-ux-access` must move to `build-small-hackathon/color-ux-access`. Requires org admin to add pre-paid credits for t4-small hardware billing. Asked organizers on Discord 2026-06-06.
 
 ---
 
