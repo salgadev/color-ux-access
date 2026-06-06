@@ -5,10 +5,10 @@ colorFrom: blue
 colorTo: gray
 sdk: gradio
 sdk_version: 6.0.0
-app_file: app_space.py
+app_file: app.py
 python_version: "3.12"
 hardware: t4-small
-dependencies: requirements_space.txt
+dependencies: requirements.txt
 ---
 
 # Color-UX-Access
@@ -29,19 +29,18 @@ dependencies: requirements_space.txt
 git clone https://github.com/salgadev/color-ux-access.git
 cd color-ux-access
 
-# Isolated venv (preventsHermes Agent environment interference)
-uv venv --python 3.12
-source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
+# Isolated venv (prevents Hermes Agent environment pollution)
+uv sync --python 3.12
 
-uv pip install -e ".[dev]"
-playwright install chromium
+# Local dev: file upload (default)
+python app.py
 
-cp .env.example .env
-# Add HF_TOKEN=hf_... from huggingface.co/settings/tokens
+# Local dev: URL capture via Playwright (optional mode)
+python app.py --url
 
+# Tests
 pytest -m smoke        # fast: imports + build checks
 pytest                 # full suite (smoke + pipeline, no slow)
-python app/app.py      # local dev (URL input, auto-screenshot)
 ```
 
 ---
@@ -127,17 +126,22 @@ Screenshot (file upload or URL capture)
 
 ## Environment & Dependencies
 
-Use `uv` to create an isolated venv — prevents interference with Hermes Agent's Python environment.
+**Local dev:** `uv sync --python 3.12` — manages all dependencies via `pyproject.toml`, produces `uv.lock`.
+
+**HF Spaces deployment:** `requirements.txt` is generated from `uv.lock` via `uv export --format requirements-txt --output-file requirements.txt`. Never hand-edit it — it is a generated artifact.
 
 ```bash
-# pyproject.toml defines all dependency groups:
-uv pip install -e "."          # core only
-uv pip install -e ".[dev]"     # + playwright, pytest
-uv pip install -e ".[space]"   # + gradio, spaces, torch
-uv pip install -e ".[all]"     # everything
+# Add a new dependency → edit pyproject.toml, then regenerate:
+uv add some-package          # or manually edit pyproject.toml
+uv sync                      # updates uv.lock
+uv export --format requirements-txt --output-file requirements.txt  # regenerate for Spaces
+git commit pyproject.toml uv.lock requirements.txt
 ```
 
-Key constraint: `huggingface_hub<0.26` required (Gradio 5.x depends on HfFolder, removed in 0.26).
+| Context | File | Tool |
+|---------|------|------|
+| Local dev / CI | `pyproject.toml` + `uv.lock` | `uv` |
+| HF Spaces deployment | `requirements.txt` | `pip` (Spaces runtime) |
 
 ---
 
@@ -147,4 +151,4 @@ Key constraint: `huggingface_hub<0.26` required (Gradio 5.x depends on HfFolder,
 - [ ] **Demo video + social post** — required to qualify for hackathon
 - [ ] **Confirm NVIDIA Nemotron requirement** — asking organizers
 - [ ] **Transfer Space to hackathon org** — must move to `build-small-hackathon/color-ux-access`
-<!-- dummy commit to trigger Space rebuild with fixed requirements_space.txt -->
+- [ ] **OpenBMB MiniCPM-V swap** — $5K prize, one-line model change in MODELS dict

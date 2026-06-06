@@ -12,6 +12,7 @@ browser_page     — Chromium page for screenshot capture tests
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -126,6 +127,29 @@ def ten_type_gallery() -> list[str]:
     ]
 
 
+# ── Token Fixture ─────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def hf_token():
+    """
+    Read HF_TOKEN from environment or ~/.cache/huggingface/token.
+
+    Order: HF_TOKEN env var → HF_API_TOKEN env var → token file.
+    Skips all E2E tests if no token is available.
+    Matches how color_ux_access.modal_app and vlm.vlm_inference resolve tokens.
+    """
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HF_API_TOKEN")
+    if token is None:
+        token_file = os.path.expanduser("~/.cache/huggingface/token")
+        if not os.path.exists(token_file):
+            pytest.skip("HF_TOKEN not found (no env var and no ~/.cache/huggingface/token)")
+        with open(token_file) as f:
+            token = f.read().strip()
+    if not token or len(token) < 10:
+        pytest.skip("HF_TOKEN is empty or too short to be valid")
+    return token
+
+
 # Playwright fixtures removed — HF Space containers cannot run a browser.
 # The capture module (color_ux_access.capture.take_screenshot) uses playwright
-# locally for screenshots, but tests use source inspection only.
+# locally for screenshots, but tests use source inspection only."
