@@ -139,7 +139,7 @@ def hf_token():
     Matches how color_ux_access.modal_app and vlm.vlm_inference resolve tokens.
     """
     token = os.environ.get("HF_TOKEN") or os.environ.get("HF_API_TOKEN")
-    if not token:
+    if token is None:
         token_file = os.path.expanduser("~/.cache/huggingface/token")
         if not os.path.exists(token_file):
             pytest.skip("HF_TOKEN not found (no env var and no ~/.cache/huggingface/token)")
