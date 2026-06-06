@@ -7,13 +7,13 @@ Architecture:
   - User uploads a screenshot (OS/browser screenshot tool → Gradio File)
   - CVD simulation runs locally (pure Python, no browser needed)
   - VLM inference runs on Space GPU via @spaces.GPU(duration=120)
-  - HF Router API → CohereLabs/aya-vision-32b
+  - HF Router API → swappable VLM backends (CohereLabs/aya-vision-32b, MiniCPM-V 4.6, ...)
   - WCAG 2.1 markdown report + CVD gallery displayed
 
 Requirements:
   - Python 3.12 (HF Spaces requirement)
   - HF_TOKEN secret set in Space settings
-  - gradio>=5.0, spaces
+  - gradio>=6.0, spaces
   - torch with CUDA libs
   - openai, pillow, daltonlens
 
@@ -22,6 +22,11 @@ Deploy:
   2. Create HF Space (SDK: Gradio, hardware: T4/mega or A10G)
   3. Add HF_TOKEN secret in Space settings
   4. Link to GitHub repo or upload this file directly
+
+Model Backends (swappable via dropdown):
+  - aya-vision-32b: CohereLabs/aya-vision-32b (default)
+  - minicpm-v-4.6: openbmb/mini-cpm-v-4_6 (OpenBMB $5K prize eligibility)
+  - nemotron-15b: nvidia/Nemotron-4-15B-base (NVIDIA prize eligibility)
 """
 
 import os
@@ -34,6 +39,7 @@ import gradio as gr
 from PIL import Image
 import numpy as np
 from daltonlens import simulate
+from openai import OpenAI  # noqa: F401 — imported here so mock can patch at module level
 
 # ── CVD Simulators ────────────────────────────────────────────────────────────
 
@@ -51,6 +57,29 @@ deficiency_config = {
     'deuteranomaly':    {'simulator': simulator,       'severity': 0.4, 'deficiency': simulate.Deficiency.DEUTAN},
     'tritanomaly':      {'simulator': tritan_simulator,'severity': 0.4, 'deficiency': simulate.Deficiency.TRITAN},
     # Achromatopsia/Achromatomaly handled via grayscale
+}
+
+# ── Swappable VLM Model Registry ───────────────────────────────────────────────
+# Enables one-line model swap for different sponsor prize eligibility:
+#   - aya-vision-32b  → CohereLabs/aya-vision-32b (default, Cohere prize)
+#   - minicpm-v-4.6   → openbmb/mini-cpm-v-4_6 (OpenBMB $5K prize)
+#   - nemotron-15b    → nvidia/Nemotron-4-15B-base (NVIDIA prize, if required)
+MODELS = {
+    "aya-vision-32b": {
+        "provider": "cohere",
+        "model_id": "CohereLabs/aya-vision-32b",
+        "description": "Default — 32B vision model via HF Router",
+    },
+    "minicpm-v-4.6": {
+        "provider": "openbmb",
+        "model_id": "openbmb/mini-cpm-v-4_6",
+        "description": "OpenBMB prize — MiniCPM-V 4.6 (~4B params, under 32B cap)",
+    },
+    "nemotron-15b": {
+        "provider": "nvidia",
+        "model_id": "nvidia/Nemotron-4-15B-base",
+        "description": "NVIDIA prize — confirm Nemotron requirement with organizers",
+    },
 }
 
 
@@ -131,14 +160,31 @@ def format_wcag_report(vlm_result: dict) -> str:
 # Subsequent calls are fast (<5s).
 
 
-def analyze_with_vlm(image_bytes: bytes) -> dict:
+def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
     """
     Analyze a screenshot for WCAG color-accessibility issues.
-    Uses CohereLabs/aya-vision-32b via HF Router API on Space GPU.
+    Uses a swappable VLM backend via HF Router API on Space GPU.
+
+    Args:
+        image_bytes: PNG/JPEG bytes of the screenshot.
+        model: One of MODELS keys ("aya-vision-32b", "minicpm-v-4.6", "nemotron-15b").
+               Defaults to "aya-vision-32b".
+
+    Raises:
+        ValueError: If model is not in MODELS registry.
 
     Runs inside @spaces.GPU(duration=120) — do not call this directly
     from non-GPU functions. Gate it behind the decorator below.
     """
+    if model not in MODELS:
+        available = ", ".join(sorted(MODELS.keys()))
+        raise ValueError(
+            f"Unknown model '{model}'. Available: {available}"
+        )
+
+    model_config = MODELS[model]
+    model_id = model_config["model_id"]
+
     hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HF_API_TOKEN')
     if not hf_token:
         return {
@@ -146,8 +192,6 @@ def analyze_with_vlm(image_bytes: bytes) -> dict:
             'findings': [],
             'passes': False,
         }
-
-    from openai import OpenAI
 
     client = OpenAI(
         base_url='https://router.huggingface.co/v1',
@@ -177,7 +221,7 @@ def analyze_with_vlm(image_bytes: bytes) -> dict:
     )
 
     response = client.chat.completions.create(
-        model='CohereLabs/aya-vision-32b',
+        model=model_id,
         messages=[
             {
                 'role': 'user',
@@ -204,14 +248,30 @@ def analyze_with_vlm(image_bytes: bytes) -> dict:
 
 # ── Gradio App ────────────────────────────────────────────────────────────────
 
-# Theme — same accessible blue/gray palette as local app
+# Theme + CSS — Gradio 6 moves these to launch(), but HF Spaces SDK installs Gradio 5.
+# Use a try/except so the code works with both versions.
 _theme_css = """
 :root { --color-primary: #1E88E5; }
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
 """
 
+try:
+    _ = gr.themes.Base(primary_hue='blue', secondary_hue='gray', neutral_hue='gray')
+    # Gradio 6 — theme creation succeeded. Theme goes to launch(), not Blocks.
+    _launch_theme = None   # Signal: don't pass theme to Blocks (Gradio 6 pattern)
+    _launch_css = None     # CSS also goes to launch() in Gradio 6
+    _is_gradio6 = True
+except Exception:
+    # Gradio 5 — use Blocks constructor for theme (Gradio 5 pattern)
+    _launch_theme = gr.themes.Base(primary_hue='blue', secondary_hue='gray', neutral_hue='gray')
+    _launch_css = _theme_css
+    _is_gradio6 = False
+
 with gr.Blocks(
     title='Color-UX-Access',
+    # Gradio 5: theme/css go in constructor. Gradio 6: use launch() instead.
+    **({"theme": _launch_theme, "css": _launch_css}
+       if not _is_gradio6 else {}),
 ) as demo:
 
     gr.Markdown('# Color-UX-Access')
@@ -229,6 +289,12 @@ with gr.Blocks(
             file_types=['.png', '.jpg', '.jpeg', '.webp'],
             type='binary',
             height=80,
+        )
+        model_select = gr.Dropdown(
+            choices=list(MODELS.keys()),
+            value="aya-vision-32b",
+            label='VLM Model',
+            info='Switch models for different sponsor prize eligibility',
         )
         submit_btn = gr.Button('Analyze', variant='primary', scale=0)
 
@@ -248,12 +314,16 @@ with gr.Blocks(
     report_output = gr.Markdown(label='Accessibility Report')
 
     # ── Event ──────────────────────────────────────────────────────────────────
-    def run_analysis(file_obj):
+    def run_analysis(file_obj, model: str = "aya-vision-32b"):
         """
         Two-stage pipeline:
           1. CVD simulation (CPU, instant) → gallery
           2. VLM inference (GPU, ~90s first call) → WCAG report
         Both run in the same function — GPU decorator wraps the whole thing.
+
+        Args:
+            file_obj: Uploaded file bytes or file-like object.
+            model: VLM backend key from MODELS dict. Defaults to "aya-vision-32b".
         """
         if file_obj is None:
             return None, [], '⚠️ Please upload a screenshot first.'
@@ -272,7 +342,9 @@ with gr.Blocks(
         # On HF Spaces, spaces.GPU is injected automatically.
         # Locally (no Space context), call analyze_with_vlm directly.
         try:
-            vlm_result = analyze_with_vlm(image_bytes)
+            vlm_result = analyze_with_vlm(image_bytes, model=model)
+        except ValueError as e:
+            return None, [], f'⚠️ {e}'
         except Exception as e:
             vlm_result = {'error': str(e), 'findings': [], 'passes': False}
 
@@ -281,7 +353,7 @@ with gr.Blocks(
 
     submit_btn.click(
         fn=run_analysis,
-        inputs=file_input,
+        inputs=[file_input, model_select],
         outputs=[original_output, cvd_output, report_output],
     )
 
@@ -304,14 +376,17 @@ with gr.Blocks(
 
 
 if __name__ == '__main__':
-    # Local dev — theme and css moved to launch() in Gradio 6
-    demo.launch(
-        server_name='0.0.0.0',
-        server_port=7860,
-        theme=gr.themes.Base(
-            primary_hue='blue',
-            secondary_hue='gray',
-            neutral_hue='gray',
-        ),
-        css=_theme_css,
-    )
+    # Gradio 6: theme/css go to launch(). Gradio 5: already in Blocks constructor.
+    if _is_gradio6:
+        demo.launch(
+            server_name='0.0.0.0',
+            server_port=7860,
+            theme=gr.themes.Base(
+                primary_hue='blue',
+                secondary_hue='gray',
+                neutral_hue='gray',
+            ),
+            css=_theme_css,
+        )
+    else:
+        demo.launch(server_name='0.0.0.0', server_port=7860)
