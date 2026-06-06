@@ -5,8 +5,8 @@
 --extra-index-url https://download.pytorch.org/whl/cu128
 torch==2.8.0
 
-# spaces + gradio (6.x required — theme/css moved to launch() in Gradio 6)
-gradio>=6.0
+# spaces — HF Spaces runtime (gradio==5.0.0 is SDK-forced, do NOT pin another version)
+# Gradio 5/6 backward compat handled at runtime in app_space.py via try/except
 spaces
 
 # VLM inference (OpenAI-compatible client for HF Router)
@@ -16,7 +16,7 @@ openai>=1.0
 pillow
 numpy
 
-# CVD simulation
+# CVD simulation (local, CPU)
 daltonlens
 
 # Env management — huggingface_hub must be <0.26 (HfFolder removed in 0.26)
