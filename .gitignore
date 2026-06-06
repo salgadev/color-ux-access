@@ -31,6 +31,9 @@ htmlcov/
 # Node (llama.cpp UI)
 llama.cpp/tools/ui/node_modules/
 
+# External dependency (reference only)
+llama.cpp/
+
 # Modal/CI
 .modal/
 
