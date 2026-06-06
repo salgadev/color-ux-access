@@ -5,109 +5,145 @@ colorFrom: blue
 colorTo: gray
 sdk: gradio
 sdk_version: 6.0.0
-app_file: app.py
+app_file: app_space.py
 python_version: "3.12"
 hardware: t4-small
 dependencies: requirements_space.txt
 ---
 
-# Color-UX-Access — HF Space
+# Color-UX-Access
 
-**Track:** Backyard AI · ≤32B parameters · Gradio app
+**HF Build Small Hackathon** · Track: Backyard AI · ≤32B parameters · Gradio + HF Space
 
 > 🔍 Test any webpage screenshot for colorblind accessibility issues — 10 CVD simulations + WCAG 2.1 report via 32B VLM.
 
----
-
-## Development Workflow
-
-**Branch → PR, never push to main directly.**
-
-```
-git checkout -b fix/your-fix-name
-# make changes, commit
-git push origin fix/your-fix-name
-gh pr create --fill --base main
-```
-
-All changes go through pull requests for review. TDD required: write failing tests first, verify GREEN before merging.
+**Live:** [salgadev-color-ux-access.hf.space](https://salgadev-color-ux-access.hf.space)
+**Code:** [github.com/salgadev/color-ux-access](https://github.com/salgadev/color-ux-access)
+**Built for:** [NARWALL](https://narwall.tech) — automated accessibility testing via screen-reader and keyboard simulation.
 
 ---
 
-## Setup
+## Quick Start
 
-### 1. Add your HF token
+```bash
+git clone https://github.com/salgadev/color-ux-access.git
+cd color-ux-access
 
-Go to **Settings → Variables and Secrets** and add:
+# Isolated venv (preventsHermes Agent environment interference)
+uv venv --python 3.12
+source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
 
-| Variable | Value |
-|----------|-------|
-| `HF_TOKEN` | Your HF token (`hf_...`) from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+uv pip install -e ".[dev]"
+playwright install chromium
 
-> First inference takes ~60–90s (model downloads + KV cache init). Subsequent calls are fast.
+cp .env.example .env
+# Add HF_TOKEN=hf_... from huggingface.co/settings/tokens
+
+pytest -m smoke        # fast: imports + build checks
+pytest                 # full suite (smoke + pipeline, no slow)
+python app/app.py      # local dev (URL input, auto-screenshot)
+```
 
 ---
 
-## Usage
+## How It Works
 
-1. **Capture** a screenshot of any webpage (OS screenshot tool, browser capture, etc.)
-2. **Upload** the image file in the Space
-3. **Get** CVD simulations + WCAG 2.1 accessibility report
+```
+Screenshot (file upload or URL capture)
+       │
+       ▼
+┌─────────────────────────────────────┐
+│  Stage 1: CVD Simulation (CPU)      │
+│  10 variants: deuteranopia,         │
+│  protanopia, tritanopia,            │
+│  deuteranomaly, protanomaly,        │
+│  tritanomaly, severe_deuteranopia,  │
+│  severe_protanopia, achromatopsia,  │
+│  achromatomaly                      │
+└─────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────┐
+│  Stage 2: VLM Inference (GPU)       │
+│  CohereLabs/aya-vision-32b via      │
+│  Hugging Face Router API            │
+│  → WCAG 2.1 JSON findings           │
+└─────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────┐
+│  Stage 3: WCAG Report (Markdown)    │
+│  Severity · WCAG criterion ·        │
+│  description · remediation          │
+└─────────────────────────────────────┘
+```
+
+**VLM:** [CohereLabs/aya-vision-32b](https://huggingface.co/CohereLabs/aya-vision-32b) via HF Router (OpenAI-compatible API).
+**CVD:** 10 types via DaltonLens (Machado2009, Vienot1999, Brettel1997) + Rec.709 grayscale for achromatopsia.
 
 ---
 
-## Architecture
+## CVD Types Supported
 
+| Type | Description | Prevalence |
+|------|-------------|-----------|
+| Deuteranopia | Red-green (green-deficient) | ~1% males |
+| Protanopia | Red-green (red-deficient) | ~1% males |
+| Tritanopia | Blue-yellow | rare |
+| Deuteranomaly | Red-green (green-weak) | ~5% males |
+| Protanomaly | Red-green (red-weak) | ~1% males |
+| Tritanomaly | Blue-yellow (weak) | rare |
+| Severe Deuteranopia | Full green-deficient | — |
+| Severe Protanopia | Full red-deficient | — |
+| Achromatopsia | Complete grayscale (rod monochromacy) | ~0.003% |
+| Achromatomaly | Partial grayscale | rare |
+
+---
+
+## Documentation
+
+| Doc | What it covers |
+|-----|----------------|
+| `docs/DEVELOPMENT.md` | Setup, uv venv, testing, git workflow |
+| `docs/ARCHITECTURE.md` | System design, CVD pipeline, VLM prompt |
+| `docs/DEPLOYMENT.md` | HF Space deploy, Modal deploy, sponsor prizes |
+| `docs/TESTING.md` | Test markers, fixtures, TDD pattern |
+
+---
+
+## Sponsor Prize Eligibility
+
+| Sponsor | Prize | Status |
+|---------|-------|--------|
+| HuggingFace | $15,000 | ✅ Eligible — top project |
+| OpenBMB (MiniCPM-V 4.6 swap) | $10,000 | 🔲 One-line model swap → $5K |
+| Modal | $250 credits | ✅ Deployed |
+| Cohere | Prize support | ✅ Using aya-vision-32b |
+| NVIDIA RTX 5080 ×2 | GPUs | ⚠️ Confirm Nemotron requirement |
+
+**Required to qualify:** Demo video + social media post.
+
+---
+
+## Environment & Dependencies
+
+Use `uv` to create an isolated venv — prevents interference with Hermes Agent's Python environment.
+
+```bash
+# pyproject.toml defines all dependency groups:
+uv pip install -e "."          # core only
+uv pip install -e ".[dev]"     # + playwright, pytest
+uv pip install -e ".[space]"   # + gradio, spaces, torch
+uv pip install -e ".[all]"     # everything
 ```
-Screenshot (file upload)
-       ↓
-┌──────────────────────────────────┐
-│  Gradio app (Space GPU, T4)      │
-│  @spaces.GPU(duration=120)       │
-└──────────────────────────────────┘
-       ↓
-HF Router API → CohereLabs/aya-vision-32b
-       ↓
-WCAG JSON → Markdown report + CVD gallery
-```
 
-**VLM:** [CohereLabs/aya-vision-32b](https://huggingface.co/CohereLabs/aya-vision-32b) via HF Router (OpenAI-compatible).
-
-**CVD:** 10 types via DaltonLens (Machado2009, Vienot1999, Brettel1997) + grayscale for Achromatopsia.
-
-**Sponsor prize eligibility:**
-- HuggingFace $15K (top project)
-- OpenBMB $5K track (MiniCPM-V 4.6 swap planned)
-- Modal $250 credits (all participants)
-- NVIDIA RTX 5080 ×2 ⚠️ _requirement unconfirmed — asking organizers_
+Key constraint: `huggingface_hub<0.26` required (Gradio 5.x depends on HfFolder, removed in 0.26).
 
 ---
 
 ## ⚠️ Pending
 
-- [ ] **Transfer Space to hackathon org** — `salgadev/color-ux-access` must move to `build-small-hackathon/color-ux-access`. Requires org admin to add pre-paid credits for t4-small hardware billing. Asked organizers on Discord 2026-06-06.
-
----
-
-## CVD Types
-
-| Type | Description |
-|------|-------------|
-| Protanopia | Red-blind (1% of males) |
-| Deuteranopia | Green-blind (1% of males) |
-| Tritanopia | Blue-blind (rare) |
-| Protanomaly | Red-weak |
-| Deuteranomaly | Green-weak |
-| Tritanomaly | Blue-weak |
-| Severe Protanopia | Full red-blind |
-| Severe Deuteranopia | Full green-blind |
-| Achromatopsia | Complete color blindness |
-| Achromatomaly | Partial monochromacy |
-
----
-
-## Project
-
-Code + full docs: [github.com/salgadev/color-ux-access](https://github.com/salgadev/color-ux-access)
-
-Built for **NARWALL** — automated accessibility testing via screen-reader and keyboard simulation.
+- [ ] **Add HF_TOKEN to Space secrets** — Space is live but VLM won't work without it
+- [ ] **Demo video + social post** — required to qualify for hackathon
+- [ ] **Confirm NVIDIA Nemotron requirement** — asking organizers
+- [ ] **Transfer Space to hackathon org** — must move to `build-small-hackathon/color-ux-access`
