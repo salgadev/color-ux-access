@@ -1,26 +1,45 @@
 """
-Color-UX-Access — HF Space deployment.
-========================================
-Gradio app for colorblind accessibility testing, ready for hackathon submission.
+Color-UX-Access — Gradio application
+=====================================
+Single-file Gradio app for colorblind accessibility testing.
+
+Usage:
+  # HF Spaces (file upload only — no Playwright needed):
+  # app_file: app.py in Space settings → runs automatically
+
+  # Local development (file upload OR URL capture):
+  python app.py                      # file upload mode
+  python app.py --url                # URL capture mode (Playwright)
 
 Architecture:
-  - User uploads a screenshot (OS/browser screenshot tool → Gradio File)
-  - CVD simulation runs locally (pure Python, no browser needed)
-  - VLM inference via deployed Modal app (https://narwall-tech--color-ux-access-ui.modal.run/)
-  - Modal endpoint → upload_screenshot.remote() → vlm_inference_fn (A10G GPU) → HF Router → aya-vision-32b
-  - WCAG 2.1 markdown report + CVD gallery displayed
+  Screenshot (file upload or URL)
+         │
+         ▼
+  Stage 1: CVD Simulation (CPU) → 10 variants
+         │
+         ▼
+  Stage 2: VLM Inference (GPU via Modal endpoint) → WCAG 2.1 JSON
+         │
+         ▼
+  Stage 3: Report (Markdown)
 
 Requirements:
-  - Python 3.12 (HF Spaces requirement)
-  - spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via gr.__version__ at runtime)
+  - Python 3.12
+  - gradio>=6.0, spaces (for HF Space deployment)
   - torch with CUDA libs
-  - openai, pillow, daltonlens, requests
+  - openai, pillow, daltonlens, requests, python-dotenv
+  - huggingface_hub==0.25.2 (HfFolder removed in 0.26)
+  - playwright (optional, for URL capture mode — not needed on Space)
 
-Deploy:
+Local setup:
+  uv sync --python 3.12
+  playwright install chromium   # only for --url mode
+
+HF Space deploy:
   1. Push to GitHub
   2. Create HF Space (SDK: Gradio, hardware: T4/mega or A10G)
   3. Add MODAL_URL secret in Space settings
-  4. Link to GitHub repo or upload this file directly
+  4. Link to GitHub repo
 
 Note: HF_TOKEN in Space secrets is for Space management only.
 Inference goes through the Modal endpoint — no HF_TOKEN needed here.
@@ -29,8 +48,7 @@ Inference goes through the Modal endpoint — no HF_TOKEN needed here.
 import os
 import io
 import json
-import base64
-import re
+import sys
 
 import gradio as gr
 from PIL import Image
@@ -45,19 +63,18 @@ severe_simulator = simulate.Simulator_Vienot1999()
 tritan_simulator = simulate.Simulator_Brettel1997()
 
 deficiency_config = {
-    'protanopia':       {'simulator': simulator,       'severity': 0.8, 'deficiency': simulate.Deficiency.PROTAN},
-    'severe_protanopia':{'simulator': severe_simulator,'severity': 1.0, 'deficiency': simulate.Deficiency.PROTAN},
-    'deuteranopia':     {'simulator': simulator,       'severity': 0.8, 'deficiency': simulate.Deficiency.DEUTAN},
-    'severe_deuteranopia':{'simulator': severe_simulator,'severity': 1.0,'deficiency': simulate.Deficiency.DEUTAN},
-    'tritanopia':       {'simulator': tritan_simulator,'severity': 0.8, 'deficiency': simulate.Deficiency.TRITAN},
-    'protanomaly':      {'simulator': simulator,       'severity': 0.4, 'deficiency': simulate.Deficiency.PROTAN},
-    'deuteranomaly':    {'simulator': simulator,       'severity': 0.4, 'deficiency': simulate.Deficiency.DEUTAN},
-    'tritanomaly':      {'simulator': tritan_simulator,'severity': 0.4, 'deficiency': simulate.Deficiency.TRITAN},
-    # Achromatopsia/Achromatomaly handled via grayscale
+    'protanopia':        {'simulator': simulator,        'severity': 0.8, 'deficiency': simulate.Deficiency.PROTAN},
+    'severe_protanopia': {'simulator': severe_simulator, 'severity': 1.0, 'deficiency': simulate.Deficiency.PROTAN},
+    'deuteranopia':      {'simulator': simulator,        'severity': 0.8, 'deficiency': simulate.Deficiency.DEUTAN},
+    'severe_deuteranopia':{'simulator': severe_simulator,'severity': 1.0, 'deficiency': simulate.Deficiency.DEUTAN},
+    'tritanopia':        {'simulator': tritan_simulator, 'severity': 0.8, 'deficiency': simulate.Deficiency.TRITAN},
+    'protanomaly':       {'simulator': simulator,        'severity': 0.4, 'deficiency': simulate.Deficiency.PROTAN},
+    'deuteranomaly':     {'simulator': simulator,        'severity': 0.4, 'deficiency': simulate.Deficiency.DEUTAN},
+    'tritanomaly':       {'simulator': tritan_simulator, 'severity': 0.4, 'deficiency': simulate.Deficiency.TRITAN},
 }
 
-# ── Swappable VLM Model Registry ───────────────────────────────────────────────
-# Enables one-line model swap for different sponsor prize eligibility:
+# ── Swappable VLM Model Registry ──────────────────────────────────────────────
+# One-line swap for different sponsor prize eligibility:
 #   - aya-vision-32b  → CohereLabs/aya-vision-32b (default, Cohere prize)
 #   - minicpm-v-4.6   → openbmb/mini-cpm-v-4_6 (OpenBMB $5K prize)
 #   - nemotron-15b    → nvidia/Nemotron-4-15B-base (NVIDIA prize, if required)
@@ -105,11 +122,8 @@ def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]
         )
         label = name.replace('_', ' ').title()
         results.append((img, label))
-
-    # Grayscale-based simulations
     results.append((simulate_achromatopsia(original, 1.0), 'Achromatopsia'))
     results.append((simulate_achromatopsia(original, 0.5), 'Achromatomaly'))
-
     return results
 
 
@@ -129,9 +143,9 @@ def format_wcag_report(vlm_result: dict) -> str:
 
     severity_icons = {'critical': '🔴', 'serious': '🟠', 'moderate': '🟡'}
     wcag_links = {
-        '1.1.1': 'https://www.w3.org/WAI/WCAG21/Understanding/non-text-content',
-        '1.4.1': 'https://www.w3.org/WAI/WCAG21/Understanding/use-of-color',
-        '1.4.3': 'https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum',
+        '1.1.1':  'https://www.w3.org/WAI/WCAG21/Understanding/non-text-content',
+        '1.4.1':  'https://www.w3.org/WAI/WCAG21/Understanding/use-of-color',
+        '1.4.3':  'https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum',
         '1.4.11': 'https://www.w3.org/WAI/WCAG21/Understanding/non-text-contrast',
     }
 
@@ -149,6 +163,35 @@ def format_wcag_report(vlm_result: dict) -> str:
         report += f"**Summary:** {vlm_result['summary']}\n"
 
     return report
+
+
+# ── URL Capture (optional — Playwright, local dev only) ───────────────────────
+
+def _get_playwright():
+    """Lazy-import Playwright only when URL mode is requested."""
+    try:
+        from playwright.sync_api import sync_playwright
+        return sync_playwright
+    except ImportError:
+        raise RuntimeError(
+            "Playwright not installed. Run: uv pip install playwright && playwright install chromium"
+        )
+
+
+def _capture_url(url: str) -> bytes:
+    """Capture a screenshot of a URL using Playwright (headless Chromium)."""
+    pw = _get_playwright()
+    with pw() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-setuid-sandbox'],
+        )
+        page = browser.new_page(viewport={'width': 1280, 'height': 720})
+        page.goto(url, wait_until='networkidle', timeout=60000)
+        page.wait_for_timeout(3000)
+        screenshot = page.screenshot(full_page=True, timeout=60000)
+        browser.close()
+    return screenshot
 
 
 # ── Modal Endpoint Helper ──────────────────────────────────────────────────────
@@ -176,7 +219,6 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
     """
     gradio_api = f"{_MODAL_URL}/gradio_api"
 
-    # Step 1: upload file → get server file path
     upload_resp = requests.post(
         f"{gradio_api}/upload",
         files={'files': ('screenshot.png', image_bytes, 'image/png')},
@@ -186,12 +228,11 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
         raise RuntimeError(f"Modal file upload failed: {upload_resp.status_code} {upload_resp.text[:100]}")
 
     file_paths = upload_resp.json()
-    if not file_paths or len(file_paths) == 0:
+    if not file_paths:
         raise RuntimeError(f"Modal file upload returned no paths: {upload_resp.text[:100]}")
 
-    file_path = file_paths[0]  # e.g. "/tmp/gradio/.../test.png"
+    file_path = file_paths[0]
 
-    # Step 2: POST predict call → get event_id
     predict_resp = requests.post(
         f"{gradio_api}/call/analyze_screenshot",
         json={'data': [{'path': file_path, 'meta': {'_type': 'gradio.FileData'}}]},
@@ -204,7 +245,6 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
     if not event_id:
         raise RuntimeError(f"Modal predict returned no event_id: {predict_resp.text[:100]}")
 
-    # Step 3: poll SSE endpoint until result is ready
     poll_url = f"{gradio_api}/call/analyze_screenshot/{event_id}"
     with requests.get(poll_url, timeout=timeout, stream=True) as poll_resp:
         if poll_resp.status_code != 200:
@@ -215,13 +255,12 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
             if line:
                 decoded = line.decode('utf-8')
                 if decoded.startswith('data: '):
-                    full_data = decoded[6:]  # strip 'data: ' prefix
+                    full_data = decoded[6:]
 
         if not full_data:
             raise RuntimeError("Modal poll returned no data")
 
         result = json.loads(full_data)
-        # Gradio API wraps the result in a JSON array: [dict]
         if isinstance(result, list):
             result = result[0]
         return result
@@ -235,8 +274,7 @@ def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
 
     Args:
         image_bytes: PNG/JPEG bytes of the screenshot.
-        model: Model backend key from MODELS dict (aya-vision-32b, minicpm-v-4.6, nemotron-15b).
-               Note: only aya-vision-32b is deployed on Modal; other options are for future use.
+        model: Model backend key from MODELS dict. Only aya-vision-32b is deployed.
 
     Returns:
         WCAG JSON dict with keys: findings (list), passes (bool), summary (str).
@@ -248,34 +286,33 @@ def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
         return {'error': str(e), 'findings': [], 'passes': False}
 
 
+# ── URL Mode Flag ──────────────────────────────────────────────────────────────
+# Set --url on the command line to enable URL capture input.
+# On HF Spaces, __file__ is set and --url is not passed, so URL mode stays off.
+
+_url_mode = '--url' in sys.argv
+
+
 # ── Gradio App ────────────────────────────────────────────────────────────────
 
-# Theme + CSS — Gradio 6 moves these to launch(), but HF Spaces SDK installs Gradio 5.
-# Use a try/except so the code works with both versions.
 _theme_css = """
 :root { --color-primary: #1E88E5; }
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
 """
 
-# Gradio version detection: SDK installs 5.0.0, local dev uses 6.x.
-# Theme/css go to Blocks constructor (Gradio 5) or launch() (Gradio 6).
 _gradio_version = tuple(int(x) for x in gr.__version__.split('.')[:2])
 _is_gradio6 = _gradio_version >= (6, 0)
 
 if _is_gradio6:
-    # Gradio 6 — theme/css go to launch(), not Blocks constructor.
     _launch_theme = None
     _launch_css = None
 else:
-    # Gradio 5 — use Blocks constructor for theme and CSS.
     _launch_theme = gr.themes.Base(primary_hue='blue', secondary_hue='gray', neutral_hue='gray')
     _launch_css = _theme_css
 
 with gr.Blocks(
     title='Color-UX-Access',
-    # Gradio 5: theme/css go in constructor. Gradio 6: use launch() instead.
-    **({"theme": _launch_theme, "css": _launch_css}
-       if not _is_gradio6 else {}),
+    **({"theme": _launch_theme, "css": _launch_css} if not _is_gradio6 else {}),
 ) as demo:
 
     gr.Markdown('# Color-UX-Access')
@@ -288,21 +325,25 @@ with gr.Blocks(
     )
 
     with gr.Row():
-        file_input = gr.File(
-            label='Screenshot',
-            file_types=['.png', '.jpg', '.jpeg', '.webp'],
-            type='binary',
-            height=80,
-        )
+        if _url_mode:
+            url_input = gr.Textbox(label='Website URL', placeholder='https://example.com', scale=1)
+            submit_btn = gr.Button('Capture & Analyze', variant='primary', scale=0)
+        else:
+            file_input = gr.File(
+                label='Screenshot',
+                file_types=['.png', '.jpg', '.jpeg', '.webp'],
+                type='binary',
+                height=80,
+            )
+            submit_btn = gr.Button('Analyze', variant='primary', scale=0)
+
         model_select = gr.Dropdown(
             choices=list(MODELS.keys()),
             value="aya-vision-32b",
             label='VLM Model',
             info='Switch models for different sponsor prize eligibility',
         )
-        submit_btn = gr.Button('Analyze', variant='primary', scale=0)
 
-    # Output row: original + CVD gallery
     with gr.Row():
         with gr.Column(scale=1):
             original_output = gr.Image(label='Original', type='pil')
@@ -317,24 +358,15 @@ with gr.Blocks(
 
     report_output = gr.Markdown(label='Accessibility Report')
 
-    # ── Event ──────────────────────────────────────────────────────────────────
-    def run_analysis(file_obj, model: str = "aya-vision-32b"):
-        """
-        Two-stage pipeline:
-          1. CVD simulation (CPU, instant) → gallery
-          2. VLM inference (GPU, ~90s first call) → WCAG report
-        Both run in the same function — GPU decorator wraps the whole thing.
+    # ── Event Handlers ─────────────────────────────────────────────────────────
 
-        Args:
-            file_obj: Uploaded file bytes or file-like object.
-            model: VLM backend key from MODELS dict. Defaults to "aya-vision-32b".
-        """
+    def run_analysis_from_file(file_obj, model: str = "aya-vision-32b"):
+        """File upload mode — used on HF Spaces."""
         if file_obj is None:
             return None, [], '⚠️ Please upload a screenshot first.'
 
         image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
 
-        # Stage 1: CVD simulations (CPU)
         try:
             original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         except Exception as e:
@@ -342,45 +374,67 @@ with gr.Blocks(
 
         cvd_gallery = generate_cvd_gallery(original)
 
-        # Stage 2: VLM inference (GPU via @spaces.GPU in Space context)
-        # On HF Spaces, spaces.GPU is injected automatically.
-        # Locally (no Space context), call analyze_with_vlm directly.
         try:
             vlm_result = analyze_with_vlm(image_bytes, model=model)
-        except ValueError as e:
-            return None, [], f'⚠️ {e}'
         except Exception as e:
             vlm_result = {'error': str(e), 'findings': [], 'passes': False}
 
         report_md = format_wcag_report(vlm_result)
         return original, cvd_gallery, report_md
 
-    submit_btn.click(
-        fn=run_analysis,
-        inputs=[file_input, model_select],
-        outputs=[original_output, cvd_output, report_output],
-    )
+    def run_analysis_from_url(url: str, model: str = "aya-vision-32b"):
+        """URL capture mode — Playwright local dev only."""
+        if not url:
+            return None, [], '⚠️ Please enter a URL first.'
 
-    # ── Examples ───────────────────────────────────────────────────────────────
-    gr.Markdown('---')
-    gr.Markdown('### Example Screenshots')
+        try:
+            image_bytes = _capture_url(url)
+        except Exception as e:
+            return None, [], f'⚠️ Could not capture URL: {e}'
 
-    # TODO: Add real example screenshot URLs or embed small test images
-    # These work only when the user uploads — no URL input on Space
-    gr.Markdown('*Use the examples above to test locally, or upload your own screenshot.*')
+        try:
+            original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        except Exception as e:
+            return None, [], f'⚠️ Could not open screenshot: {e}'
 
-    # Example: a minimal placeholder that demonstrates the UI
-    gr.Examples(
-        examples=[],  # Populate with example file paths or (filepath, label) tuples
-        inputs=file_input,
-        outputs=[original_output, cvd_output, report_output],
-        fn=run_analysis,
-        cache_examples=False,
-    )
+        cvd_gallery = generate_cvd_gallery(original)
+
+        try:
+            vlm_result = analyze_with_vlm(image_bytes, model=model)
+        except Exception as e:
+            vlm_result = {'error': str(e), 'findings': [], 'passes': False}
+
+        report_md = format_wcag_report(vlm_result)
+        return original, cvd_gallery, report_md
+
+    if _url_mode:
+        submit_btn.click(
+            fn=run_analysis_from_url,
+            inputs=[url_input, model_select],
+            outputs=[original_output, cvd_output, report_output],
+        )
+        gr.Examples(
+            examples=[
+                ["https://www.google.com"],
+                ["https://www.wikipedia.org"],
+                ["https://www.apple.com"],
+            ],
+            inputs=url_input,
+            outputs=[original_output, cvd_output, report_output],
+            fn=run_analysis_from_url,
+            cache_examples=False,
+        )
+    else:
+        submit_btn.click(
+            fn=run_analysis_from_file,
+            inputs=[file_input, model_select],
+            outputs=[original_output, cvd_output, report_output],
+        )
+        gr.Markdown('---')
+        gr.Markdown('*Upload a screenshot or use URL capture mode (`python app.py --url`).*')
 
 
 if __name__ == '__main__':
-    # Gradio 6: theme/css go to launch(). Gradio 5: already in Blocks constructor.
     if _is_gradio6:
         demo.launch(
             server_name='0.0.0.0',
