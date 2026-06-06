@@ -94,6 +94,8 @@ def format_wcag_report(vlm_result: dict) -> str:
 
     findings = vlm_result.get('findings', [])
     if not findings:
+        if vlm_result.get('passes', False):
+            return "✅ Pass — No accessibility issues detected."
         return "✅ **No accessibility issues detected.**"
 
     report = "## WCAG Accessibility Report\n\n"
@@ -210,12 +212,6 @@ _theme_css = """
 
 with gr.Blocks(
     title='Color-UX-Access',
-    theme=gr.themes.Base(
-        primary_hue='blue',
-        secondary_hue='gray',
-        neutral_hue='gray',
-    ),
-    css=_theme_css,
 ) as demo:
 
     gr.Markdown('# Color-UX-Access')
@@ -308,5 +304,14 @@ with gr.Blocks(
 
 
 if __name__ == '__main__':
-    # Local dev — no @spaces.GPU needed, just run with standard Gradio
-    demo.launch(server_name='0.0.0.0', server_port=7860)
+    # Local dev — theme and css moved to launch() in Gradio 6
+    demo.launch(
+        server_name='0.0.0.0',
+        server_port=7860,
+        theme=gr.themes.Base(
+            primary_hue='blue',
+            secondary_hue='gray',
+            neutral_hue='gray',
+        ),
+        css=_theme_css,
+    )
