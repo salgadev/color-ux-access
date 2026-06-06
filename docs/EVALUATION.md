@@ -6,9 +6,11 @@
 
 ## Hackathon Requirements (must meet to qualify)
 
-1. Model ≤32B parameters ✓ (aya-vision-32b = 32B)
-2. Gradio app hosted as HF Space 🔲 (**primary gap — currently on Modal**)
-3. Demo video + social post 🔲 (not started)
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Model ≤32B parameters | ✅ aya-vision-32b (32B) |
+| 2 | Gradio app hosted as HF Space | ✅ `salgadev-color-ux-access.hf.space` (BUILDING) |
+| 3 | Demo video + social post | 🔲 Not started |
 
 ---
 
@@ -20,11 +22,10 @@
 
 **Our alignment:**
 - ≤32B ✓ (aya-vision-32b)
-- Gradio app ✓ (local `app/app.py`)
-- HF Space 🔲 (not deployed yet — primary blocker)
+- Gradio app ✓ (HF Space deployed)
 - Real problem solved for real user ✓ (CVD accessibility)
 
-**Verdict: PRIMARY TARGET.** We already meet the core criteria. HF Space deploy is the only gap.
+**Verdict: PRIMARY TARGET.** Core criteria met.
 
 ---
 
@@ -34,10 +35,8 @@
 
 **Our alignment:** ❌
 - We use CohereLabs/aya-vision-32b via HF Router (not OpenAI)
-- Would require switching VLM to GPT-4o-mini or similar
-- Worth considering ONLY if OpenAI has special award category that rewards this
 
-**Verdict: LOW PRIORITY.** Not our model choice. Skip unless OpenBMB awards run out.
+**Verdict: LOW PRIORITY.** Skip unless OpenBMB awards run out.
 
 ---
 
@@ -49,7 +48,6 @@
 - MiniCPM-V 4.6 is a vision VLM (~4B params, well under 32B limit)
 - Swap `CohereLabs/aya-vision-32b` → `openbmb/mini-cpm-v-4_6`
 - Eligible for $5K Backyard AI track prize
-- Discord: <@1268130730509074476>, <@1379652867916566572>, <@899634493458112512>
 
 **Effort:** ~1 line change in `vlm/vlm_inference.py` (model name). HF Router compatible.
 
@@ -57,21 +55,28 @@
 - Model: https://huggingface.co/openbmb/MiniCPM-V-4.6
 - Cookbook: https://opensqz.github.io/MiniCPM-V-CookBook/site/en/index.html
 - GitHub: https://github.com/OpenBMB/MiniCPM-V-Apps
+- Discord: <@1268130730509074476>, <@1379652867916566572>, <@899634493458112512>
 
-**Verdict: WORTH SWAPPING FOR.** $5K for minimal effort. **Evaluate after T5 (HF Space deploy).**
+**Verdict: SWAP FOR. $5K for minimal effort.**
 
 ---
 
 ### 🎮 NVIDIA — 2× RTX 5080 GPUs (top projects)
 
-**Requirement:** Top projects.
+**Requirement:** ⚠️ **UNCONFIRMED — per Discord: Nemotron models must be used for NVIDIA prize.**
+- Discord people say Nemotron models are required (not just "top project")
+- Needs confirmation from organizers
 
-**Our alignment:** ✅ via HF Space deploy
-- RTX 5080 goes to top projects overall
-- No NVIDIA-specific integration needed
-- Already on Modal which has NVIDIA GPUs
+**Possible models (≤32B):**
+- `nvidia/Nemotron-4-2B-base` (~2B params)
+- `nvidia/Nemotron-4-8B-base` (~8B params)
+- `nvidia/Nemotron-4-15B-base` (~15B params)
 
-**Verdict: WIN BY DEFAULT.** No extra work — just build the best project.
+**Our current alignment:** ❌ We use CohereLabs/aya-vision-32b (Cohere model)
+
+**If required:** Would need to switch VLM to a Nemotron variant (e.g., `nvidia/Nemotron-4-15B-base` via HF Router) OR confirm that "any top project" qualifies.
+
+**Verdict: CONFIRM WITH ORGANIZERS FIRST.** If Nemotron is strictly required, we need to swap. If "top project" qualifier, no action needed.
 
 ---
 
@@ -81,9 +86,9 @@
 
 **Our alignment:** ✅ ALREADY DEPLOYED
 - `narwall-tech--color-ux-access-ui.modal.run` is live
-- We have $250 credits from participation
+- $250 credits claimed from participation
 
-**Verdict: ✅ DONE.** Already deployed and working.
+**Verdict: ✅ DONE.** Already deployed.
 
 ---
 
@@ -93,24 +98,20 @@
 
 **Our alignment:** ✅ ALREADY USING IT
 - `CohereLabs/aya-vision-32b` is our VLM
-- Already aligned
 
-**Verdict: ✅ DONE.** No extra work.
+**Verdict: ✅ DONE.**
 
 ---
 
 ### 🖼️ Black Forest Labs — Prize support
 
-**Models:** FLUX.2 [klein] — 4B text-to-image model (distilled 4-step inference).
+**Models:** FLUX.2 [klein] — 4B text-to-image model.
 
 **Our alignment:** ❌ NOT RELEVANT
 - Klein is a text-to-image generation model, not a VLM
-- Our task is accessibility analysis (VLM), not image generation
-- No logical integration path for CVD simulation using BFL Klein
+- No logical integration path for CVD accessibility analysis
 
-**Exception:** Could generate synthetic "before/after" accessibility remediation images — but that's a stretch and low-value for the hackathon demo.
-
-**Verdict: SKIP.** Image generation doesn't serve our VLM accessibility analysis use case.
+**Verdict: SKIP.**
 
 ---
 
@@ -121,10 +122,9 @@
 **Effort: HIGH. Impact: HIGH if judges value model work.**
 
 - Option A: LoRA fine-tune on accessibility dataset
-- Option B: Publish a specialized adapter for colorblind accessibility
 - Risk: Time-consuming, may not converge in hackathon window
 
-**Verdict: SKIP FOR NOW.** Only attempt if T3-T5 done and time remains.
+**Verdict: SKIP FOR NOW.**
 
 ---
 
@@ -134,10 +134,9 @@
 
 - Custom CSS for accessibility theme
 - CVD comparison slider (original vs simulated side-by-side)
-- Custom color palette matching colorblind-awareness theme
 - JavaScript for smooth transitions
 
-**Verdict: WORTH DOING.** Low effort, high demo impact. **Target after HF Space deploy (T5).**
+**Verdict: WORTH DOING.** Target after MVP is functional.
 
 ---
 
@@ -145,17 +144,11 @@
 
 **Effort: MEDIUM. Impact: MEDIUM.**
 
-Two paths:
-1. **Zerogpu on HF Space** — use `llama-cpp-python` with CUDA support via the whl index from the BFL guide. Text generation only (not vision).
-2. **Hybrid vision** — VLM for image analysis + llama.cpp for text report generation.
-3. **Modal fallback** — our current `vlm/vlm_inference_llama.py` for local GGUF.
+- Zerogpu on HF Space: `llama-cpp-python` with CUDA whl
+- Hybrid: VLM for image + llama.cpp for text report generation
+- Could use GGUF model (e.g., Qwen2-VL-7B-Instruct-GGUF) for local inference
 
-**Integration with current architecture:**
-- Current pipeline: screenshot → VLM (HF Router) → WCAG text report
-- llama.cpp could generate the text report from structured data (not the vision part)
-- Zerogpu path: tricky — need Python 3.12 + specific index URLs + Spaces GPU
-
-**Verdict: MEDIUM PRIORITY.** Worth evaluating after HF Space deploy. The Zerogpu path is interesting for Bonus 3 (Llama Champion) + demonstrating hybrid architecture.
+**Verdict: MEDIUM PRIORITY.**
 
 ---
 
@@ -163,11 +156,10 @@ Two paths:
 
 **Effort: LOW. Impact: MEDIUM.**
 
-- Save development conversation logs as HF Dataset
+- Save dev conversation logs as HF Dataset
 - Organize by phase: screenshot → CVD → VLM → report
-- Include code snippets and lessons learned
 
-**Verdict: WORTH DOING.** Low effort, demonstrates process quality. **Do alongside T7 (blog).**
+**Verdict: DO THIS.** Low effort, process quality signal.
 
 ---
 
@@ -177,37 +169,106 @@ Two paths:
 
 - Technical blog post about colorblind accessibility testing methodology
 - Case study: problem → approach → WCAG findings → lessons
-- Amplifies social reach for NARWALL too
 
-**Verdict: DO THIS.** Low effort, high impact for hackathon scoring and NARWALL brand.
+**Verdict: DO THIS.** Low effort, high hackathon + NARWALL brand impact.
 
 ---
 
-## Implementation Priority (High Impact, Least Effort)
+## Architecture: Model-Swappable VLM
+
+> CARLOS: "we can make models swappable in our app"
+
+**Goal:** Support multiple VLM backends for different sponsor prizes (no code duplication).
+
+**Pattern:** Abstract VLM backend behind a `vlm/analyzer.py` interface:
+
+```
+screenshot_bytes
+      ↓
+analyzer.analyze(image_bytes, model="aya-vision-32b")  ← single call
+      ↓
+[backend: HF Router → CohereLabs/aya-vision-32b]
+[backend: HF Router → openbmb/mini-cpm-v-4_6]          ← OpenBMB prize
+[backend: HF Router → nvidia/Nemotron-4-15B]           ← NVIDIA prize (if required)
+[backend: llama.cpp → local GGUF]                      ← Llama Champion bonus
+      ↓
+WCAG JSON (normalized format)
+```
+
+**Implementation:**
+```python
+# vlm/analyzer.py — swappable VLM backend
+MODELS = {
+    "aya-vision-32b":    {"provider": "cohere",  "model_id": "CohereLabs/aya-vision-32b"},
+    "minicpm-v-4.6":     {"provider": "openbmb", "model_id": "openbmb/mini-cpm-v-4_6"},
+    "nemotron-15b":      {"provider": "nvidia",  "model_id": "nvidia/Nemotron-4-15B-base"},
+    "qwen2-vl-7b-gguf":  {"provider": "llama",   "model_path": ".../qwen2-vl-7b-q4_k_m.gguf"},
+}
+
+def analyze(image_bytes, model="aya-vision-32b"):
+    config = MODELS[model]
+    if config["provider"] == "llama":
+        return analyze_with_llama(image_bytes, config["model_path"])
+    else:
+        return analyze_with_hf_router(image_bytes, config["model_id"])
+```
+
+**On HF Space UI:** Add a `gr.Dropdown` to let user select model:
+```python
+model_select = gr.Dropdown(
+    choices=list(MODELS.keys()),
+    value="aya-vision-32b",
+    label="VLM Backend"
+)
+```
+
+**Use cases (notes):**
+- Default: CohereLabs/aya-vision-32b (general WCAG analysis)
+- OpenBMB award: MiniCPM-V 4.6 (swap one line, submit for $5K)
+- NVIDIA award: Nemotron (swap if required)
+- Llama Champion: GGUF local model (offline, no API cost)
+- NARWALL production: specific model fine-tuned on accessibility (future)
+
+---
+
+## Implementation Priority
 
 | Priority | Task | Reason |
 |----------|------|--------|
-| 🔴 P0 | **HF Space deploy** | Required to qualify + compete for $15K + $250 Modal credits |
-| 🔴 P0 | **Demo video + social post** | Required to qualify |
-| 🟡 P1 | **Blog post (Bonus 5)** | Low effort, high impact |
-| 🟡 P1 | **Off-brand Gradio theme (Bonus 2)** | Low effort, high demo impression |
-| 🟡 P1 | **OpenBMB MiniCPM-V swap** | $10K special award for one-line model change |
-| 🟢 P2 | **Agent trace (Bonus 4)** | Low effort, medium impact |
-| 🟢 P2 | **Zerogpu/llama.cpp evaluation** | Medium effort, Bonus 3 credit |
-| 🔵 SKIP | BFL Klein | Not relevant to VLM accessibility analysis |
-| 🔵 SKIP | OpenAI models | Not our VLM choice |
+| 🔴 **P0** | **Confirm NVIDIA Nemotron requirement** | May require VLM swap |
+| 🔴 **P0** | **Add HF_TOKEN secret to Space** | Space is live but VLM won't work without token |
+| 🔴 **P0** | **Test first Space inference** | Verify end-to-end works |
+| 🟡 **P1** | **Implement model swappable backend** | Enables OpenBMB + NVIDIA prize eligibility |
+| 🟡 **P1** | **Blog post (Bonus 5)** | Low effort, high impact |
+| 🟡 **P1** | **OpenBMB MiniCPM-V swap** | $5K for one-line change |
+| 🟢 **P2** | **Off-brand Gradio theme (Bonus 2)** | Custom CSS, CVD slider |
+| 🟢 **P2** | **Agent trace (Bonus 4)** | Low effort |
+| 🟢 **P2** | **Demo video + social post** | Required to qualify |
+| 🔵 SKIP | BFL Klein | Not relevant to VLM task |
 | 🔵 SKIP | Fine-tune (Bonus 1) | High effort, time risk |
 
 ---
 
-## Next: T5 — HF Space Deploy
+## Hackathon Tasks
 
-Current blocker: our app uses Modal-specific `@modal.asgi_app()` decorator. Need to create a separate `app_space.py` that uses standard Gradio with `@spaces.GPU()` for VLM inference.
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| T1 | CVD simulation (10 types, daltonlens) | ✅ Done | `app/app.py` has full 10-type simulation |
+| T2 | VLM pipeline (HF Router → WCAG JSON) | ✅ Done | Mock returning correct JSON, real via Router |
+| T3 | Architecture (screenshot → CVD → VLM → report) | ✅ Done | File upload + VLM via HF Router, Space deployable |
+| T4 | CDP CVD simulation | 🔲 | 10-type daltonlens is sufficient for MVP |
+| T5 | HF Space deploy | ✅ Done | `salgadev-color-ux-access.hf.space` — BUILDING |
+| T6 | Model swappable backend | 🔲 | Priority P1 — enables sponsor prize swaps |
+| T7 | Demo video + social post | 🔲 | Required to qualify |
+| T8 | Blog post (Bonus 5) | 🔲 | P1 — low effort, high impact |
+| T9 | NVIDIA Nemotron confirmation | 🔲 | P0 — may need VLM swap |
+| T10 | OpenBMB MiniCPM-V swap | 🔲 | P1 — $5K for one-line change |
+| T11 | Off-brand Gradio theme (Bonus 2) | 🔲 | P2 — custom CSS, CVD slider |
+| T12 | Agent trace (Bonus 4) | 🔲 | P2 — process quality signal |
 
-Steps:
-1. Create `app_space.py` — standard Gradio, same UI as `app/app.py`
-2. Replace `upload_screenshot` modal function with `@spaces.GPU(duration=120)` function
-3. Use HF Router API for VLM (same as current `vlm/vlm_inference.py`)
-4. Create HF Space: `color-ux-access` in `salgadev` org
-5. Update README with Space URL
-6. Deploy and verify
+**Focus: MVP functional → polish → sponsor-specific optimizations**
+
+---
+
+*Last updated: 2026-06-06*
+*Notes: gr.Workflow — see CARLOS for livestream timestamp. Confirmed Gradio event chaining via gr.on() + .then() / .success() is the standard chaining API.*
