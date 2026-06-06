@@ -1,2 +1,55 @@
-*.png
-venv
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+.env/
+
+# Backup files
+*.backup
+*.backup2
+*.orig
+*.before_fix
+*.local
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage*
+*.cover
+
+# Node (llama.cpp UI)
+llama.cpp/tools/ui/node_modules/
+
+# External dependency (reference only)
+llama.cpp/
+
+# Modal/CI
+.modal/
+
+# Image cache (test artifacts)
+img_cache/
+*.jpg  # ignore uploaded screenshots in project root
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Confidential
+*token*
+*secret*
+*.env
