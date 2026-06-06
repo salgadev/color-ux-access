@@ -1,0 +1,28 @@
+# HF Space requirements — Python 3.12, spaces GPU
+# ─────────────────────────────────────────────────────────────
+# torch ships with CUDA libs needed by some inference paths.
+# Add torch first from PyTorch index, then the rest.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0
+
+# spaces + gradio
+gradio>=5.0
+spaces
+
+# VLM inference (OpenAI-compatible client for HF Router)
+openai>=1.0
+
+# Image processing
+pillow
+numpy
+
+# CVD simulation
+daltonlens
+
+# Env management
+python-dotenv
+huggingface_hub
+
+# Optional: for local development only (not needed on Space)
+# playwright  (commented — no browser needed on Space, screenshot is file upload)
+# pytest-playwright
