@@ -1,7 +1,6 @@
 # AGENTS.md — Color-UX-Access
 
-> **HF Build Small Hackathon** · Track: Backyard AI · ≤32B parameters · Gradio + HF Space  
-> Location: `G:\AI\HERMES\color-ux-access\`
+> **HF Build Small Hackathon** · Track: Backyard AI · ≤32B parameters · Gradio + HF Space
 
 ---
 
@@ -157,14 +156,14 @@ No source inspection — this is a single-file Gradio app, not a framework. The 
 
 ## Active Tasks
 
-- [ ] **T1:** Fix Playwright screenshot capture (blocking per BONUS_PLAN.md)
-- [ ] **T2:** Wire real VLM into `app.py` — replace mock `analyze_image_with_vlm()` with `vlm_inference.py`
-- [ ] **T3:** Run full pipeline test (URL → screenshot → CVD → VLM → WCAG report)
-- [ ] **T4:** Deploy to HF Space
-- [ ] **T5:** Bonus 2 (custom frontend) — CVD comparison slider, better theme
-- [ ] **T6:** Bonus 4 (trace sharing) — document dev process as HF Dataset
-- [ ] **T7:** Bonus 5 (field notes) — blog post
-- [ ] **T8:** Demo video + social post
+- [x] **T1:** Screenshot capture → `color_ux_access/capture.py` (Playwright + PIL) — working locally
+- [x] **T2:** Wire VLM into `color_ux_access/modal_app.py` — `upload_screenshot.remote()` → `vlm_inference_fn` (A10G GPU) → HF Router API → aya-vision-32b — deployed and returning JSON
+- [ ] **T3:** Verify real VLM response quality — confirm WCAG findings are meaningful, not generic
+- [ ] **T4:** CVD simulation — 10-type colorblind simulation in UI (DaltonLens + colorspacious)
+- [ ] **T5:** HF Space deploy — primary hackathon target
+- [ ] **T6:** Bonus 2 (Off-Brand) — custom Gradio theme past default, CVD comparison slider
+- [ ] **T7:** Bonus 5 (Field Notes) — blog post on huggingface.co/blog
+- [ ] **T8:** Demo video + social post (required to qualify)
 
 ---
 
@@ -199,27 +198,20 @@ The VLM should return a JSON array of issues, each with:
 
 | Mode | Implementation | Status |
 |------|---------------|--------|
-| **HF Router API** (default) | `vlm_inference.py` → CohereLabs/aya-vision-32b via `router.huggingface.co/v1` | Exists, not wired to `app.py` |
-| **Local llama.cpp** | `vlm_inference_llama.py` → any vision GGUF via localhost:8080 | Exists, not wired to `app.py` |
+| **HF Router API** (default) | `vlm/vlm_inference.py` → CohereLabs/aya-vision-32b via `router.huggingface.co/v1` | ✅ Deployed on Modal — returning WCAG JSON |
+| **Local llama.cpp** | `vlm/vlm_inference_llama.py` → any vision GGUF via localhost:8080 | ⚙️ Exists, not wired to UI |
 
 ---
 
 ## Reuse from NARWALL
 
-```
-D:\CODE\narwall-selenium\
-├── AGENTS.md                            → "test from perspective of assistive tech users" philosophy
-├── docs/skills/narwall-tdd.md           → TDD patterns (source inspection NOT ported — different risk model)
-└── docs/technology-readiness/
-    └── REGRESSION_GUARDS.md             → WCAG mapping approach (port here)
-
-G:\AI\HERMES\skills\gradio-huggingface-space\
-├── SKILL.md                             → Gradio 6.x patterns
-└── references/
-    ├── gradio-dual-mode-toggle.md       → 2-mode UI toggle
-    ├── daltonlens-cvd-api.md            → 10-type CVD simulation reference
-    └── accessibility-reporting.md        → WCAG mapper reference
-```
+| Source | What to reuse |
+|--------|--------------|
+| `narwall-selenium/AGENTS.md` | "test from perspective of assistive tech users" philosophy |
+| `narwall-selenium/docs/skills/narwall-tdd.md` | TDD patterns (source inspection NOT ported — different risk model) |
+| `narwall-selenium/docs/technology-readiness/REGRESSION_GUARDS.md` | WCAG mapping approach |
+| `skills/gradio-huggingface-space/SKILL.md` | Gradio 6.x patterns |
+| `skills/gradio-huggingface-space/references/daltonlens-cvd-api.md` | 10-type CVD simulation reference |
 
 ---
 
