@@ -1,3 +1,4 @@
+gradio>=6.0
 pillow
 playwright
 pytest-playwright

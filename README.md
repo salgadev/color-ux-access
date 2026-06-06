@@ -4,8 +4,8 @@ emoji: 🔍
 colorFrom: blue
 colorTo: gray
 sdk: gradio
-sdk_version: 5.0.0
-app_file: app_space.py
+sdk_version: 6.0.0
+app_file: app.py
 python_version: "3.12"
 hardware: t4-small
 dependencies: requirements_space.txt
@@ -16,6 +16,21 @@ dependencies: requirements_space.txt
 **Track:** Backyard AI · ≤32B parameters · Gradio app
 
 > 🔍 Test any webpage screenshot for colorblind accessibility issues — 10 CVD simulations + WCAG 2.1 report via 32B VLM.
+
+---
+
+## Development Workflow
+
+**Branch → PR, never push to main directly.**
+
+```
+git checkout -b fix/your-fix-name
+# make changes, commit
+git push origin fix/your-fix-name
+gh pr create --fill --base main
+```
+
+All changes go through pull requests for review. TDD required: write failing tests first, verify GREEN before merging.
 
 ---
 
