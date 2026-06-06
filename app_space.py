@@ -13,7 +13,7 @@ Architecture:
 Requirements:
   - Python 3.12 (HF Spaces requirement)
   - HF_TOKEN secret set in Space settings
-  - spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via try/except at runtime)
+- spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via gr.__version__ at runtime)
   - torch with CUDA libs
   - openai, pillow, daltonlens
 
