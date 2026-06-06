@@ -5,8 +5,8 @@
 --extra-index-url https://download.pytorch.org/whl/cu128
 torch==2.8.0
 
-# spaces + gradio
-gradio>=5.0
+# spaces + gradio (6.x required — theme/css moved to launch() in Gradio 6)
+gradio>=6.0
 spaces
 
 # VLM inference (OpenAI-compatible client for HF Router)
@@ -19,9 +19,10 @@ numpy
 # CVD simulation
 daltonlens
 
-# Env management
+# Env management — huggingface_hub must be <0.26 (HfFolder removed in 0.26)
+# gradio 5.x depends on HfFolder which was removed in huggingface_hub 0.26
 python-dotenv
-huggingface_hub
+huggingface_hub==0.25.2
 
 # Optional: for local development only (not needed on Space)
 # playwright  (commented — no browser needed on Space, screenshot is file upload)
