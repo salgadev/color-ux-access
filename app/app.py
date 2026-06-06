@@ -7,6 +7,7 @@ from daltonlens import simulate
 import json
 import base64
 from io import BytesIO
+from app.custom_theme import color_ux_access_theme
 
 # Mock VLM analysis for testing - replace with real model later
 def analyze_image_with_vlm(image, prompt):
@@ -76,21 +77,10 @@ def simulate_achromatopsia(image, severity):
     else:
         return gray_rgb
 
-def create_cvd_grid(cvd_images):
-    """Create a grid of CVD simulation images for display."""
-    if not cvd_images:
-        return []
-    
-    # We'll return a list of (image, label) tuples for Gradio Gallery
-    grid = []
-    for name, img in cvd_images.items():
-        grid.append((img, name.replace('_', ' ').title()))
-    return grid
-
 def create_accessibility_report(url):
     """Main function to process URL and generate report."""
     if not url:
-        return None, [], "Please enter a URL"
+        return None, None, "Please enter a URL"
     
     try:
         with sync_playwright() as p:
@@ -148,18 +138,52 @@ def create_accessibility_report(url):
         except json.JSONDecodeError:
             formatted_report = f"## VLM Analysis (Raw Output)\n\n{vlm_result}"
         
-        # Convert cvd_images dict to gallery format
-        cvd_grid = create_cvd_grid(cvd_images)
+        # Convert cvd_images dict to list for Gradio Gallery
+        cvd_list = []
+        for name, img in cvd_images.items():
+            cvd_list.append((img, name.replace('_', ' ').title()))
         
-        return original_image, cvd_grid, formatted_report
+        return original_image, cvd_list, formatted_report
     
     except Exception as e:
         print(f"Error in create_accessibility_report: {e}")
-        return None, [], f"Error processing URL: {str(e)}"
+        return None, None, f"Error processing URL: {str(e)}"
 
-# Test the function
+# Gradio Interface
+with gr.Blocks(title="Color-UX-Access: Colorblind Accessibility Tester") as demo:
+    gr.Markdown("# Color-UX-Access")
+    gr.Markdown("Test web pages for color accessibility issues using AI vision simulation for color vision deficiency.")
+    
+    with gr.Row():
+        url_input = gr.Textbox(label="Website URL", placeholder="https://example.com")
+        submit_btn = gr.Button("Analyze", variant="primary")
+    
+    with gr.Row():
+        with gr.Column():
+            original_output = gr.Image(label="Original Screenshot", type="pil")
+        with gr.Column():
+            cvd_output = gr.Gallery(label="CVD Simulations", show_label=True, columns=2, rows=4, object_fit="contain", height="auto")
+    
+    report_output = gr.Markdown(label="Accessibility Report")
+    
+    submit_btn.click(
+        fn=create_accessibility_report,
+        inputs=url_input,
+        outputs=[original_output, cvd_output, report_output]
+    )
+    
+    # Examples
+    gr.Examples(
+        examples=[
+            ["https://www.google.com"],
+            ["https://www.wikipedia.org"],
+            ["https://www.apple.com"]
+        ],
+        inputs=url_input,
+        outputs=[original_output, cvd_output, report_output],
+        fn=create_accessibility_report,
+        cache_examples=False
+    )
+
 if __name__ == "__main__":
-    print("Testing create_accessibility_report function...")
-    result = create_accessibility_report("https://www.google.com")
-    print(f"Result: {result}")
-    print("Test completed successfully!")
+    demo.launch(theme=color_ux_access_theme)
