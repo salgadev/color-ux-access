@@ -6,11 +6,11 @@
 
 ## Hackathon Requirements (must meet to qualify)
 
-| # | Requirement | Status |
-|---|-------------|--------|
-| 1 | Model ≤32B parameters | ✅ aya-vision-32b (32B) |
-| 2 | Gradio app hosted as HF Space | ✅ `salgadev-color-ux-access.hf.space` (BUILDING) |
-| 3 | Demo video + social post | 🔲 Not started |
+| # | Requirement | Status | Notes |
+|---|-------------|--------|-------|
+| 1 | Model ≤32B parameters | ✅ Done | `CohereLabs/aya-vision-32b` (32B); also `openbmb/mini-cpm-v-4_6` (~4B) available |
+| 2 | Gradio app hosted as HF Space | ⚠️ Deployed, BUILD_ERROR | `salgadev-color-ux-access.hf.space` — Gradio 5/6 compat added, rebuild triggered |
+| 3 | Demo video + social post | 🔲 Not started | Deadline: this weekend |
 
 ---
 
@@ -85,10 +85,10 @@
 **Requirement:** Use Modal for deployment.
 
 **Our alignment:** ✅ ALREADY DEPLOYED
-- `narwall-tech--color-ux-access-ui.modal.run` is live
+- `narwall-tech--color-ux-access-ui.modal.run` — LIVE (200 OK)
 - $250 credits claimed from participation
 
-**Verdict: ✅ DONE.** Already deployed.
+**Verdict: ✅ DONE.**
 
 ---
 
@@ -224,9 +224,9 @@ model_select = gr.Dropdown(
 
 **Use cases (notes):**
 - Default: CohereLabs/aya-vision-32b (general WCAG analysis)
-- OpenBMB award: MiniCPM-V 4.6 (swap one line, submit for $5K)
-- NVIDIA award: Nemotron (swap if required)
-- Llama Champion: GGUF local model (offline, no API cost)
+- OpenBMB award: MiniCPM-V 4.6 (swap one line, submit for $5K) — already in MODELS
+- NVIDIA award: Nemotron (swap if required) — already in MODELS
+- Llama Champion: GGUF local model (offline, no API cost) — model dropdown exists, GGUF path not yet wired
 - NARWALL production: specific model fine-tuned on accessibility (future)
 
 ---
@@ -257,18 +257,20 @@ model_select = gr.Dropdown(
 | T2 | VLM pipeline (HF Router → WCAG JSON) | ✅ Done | Mock returning correct JSON, real via Router |
 | T3 | Architecture (screenshot → CVD → VLM → report) | ✅ Done | File upload + VLM via HF Router, Space deployable |
 | T4 | CDP CVD simulation | 🔲 | 10-type daltonlens is sufficient for MVP |
-| T5 | HF Space deploy | ✅ Done | `salgadev-color-ux-access.hf.space` — BUILDING |
-| T6 | Model swappable backend | 🔲 | Priority P1 — enables sponsor prize swaps |
-| T7 | Demo video + social post | 🔲 | Required to qualify |
+| T5 | HF Space deploy | ⚠️ Deployed, BUILD_ERROR | `salgadev-color-ux-access.hf.space` — Gradio 5/6 compat added, rebuilding |
+| T6 | Model swappable backend | ✅ Done | MODELS dict + gr.Dropdown + model= param in `analyze_with_vlm` |
+| T7 | Demo video + social post | 🔲 | **Required to qualify** — deadline this weekend |
 | T8 | Blog post (Bonus 5) | 🔲 | P1 — low effort, high impact |
-| T9 | NVIDIA Nemotron confirmation | 🔲 | P0 — may need VLM swap |
-| T10 | OpenBMB MiniCPM-V swap | 🔲 | P1 — $5K for one-line change |
-| T11 | Off-brand Gradio theme (Bonus 2) | 🔲 | P2 — custom CSS, CVD slider |
-| T12 | Agent trace (Bonus 4) | 🔲 | P2 — process quality signal |
+| T9 | NVIDIA Nemotron confirmation | 🔲 | P0 — may need VLM swap if Nemotron strictly required |
+| T10 | OpenBMB MiniCPM-V swap | 🔲 | P1 — $5K for one-line change, already in MODELS |
+| T11 | Off-brand Gradio theme (Bonus 2) | 🔲 | P2 — custom CSS, CVD slider, Bonus 2 |
+| T12 | Agent trace (Bonus 4) | 🔲 | P2 — process quality signal, Bonus 4 |
+| T13 | Gradio 5/6 backward compat | ✅ Done | try/except version detection in `app_space.py` |
+| T14 | HF_TOKEN secret in Space | 🔲 | P0 — needed for VLM inference to work |
 
 **Focus: MVP functional → polish → sponsor-specific optimizations**
 
 ---
 
-*Last updated: 2026-06-06*
-*Notes: gr.Workflow — see CARLOS for livestream timestamp. Confirmed Gradio event chaining via gr.on() + .then() / .success() is the standard chaining API.*
+*Last updated: 2026-06-07*
+*Notes: Gradio 5/6 compat via try/except `_is_gradio6` flag in app_space.py. Model swappable backend implemented (aya-vision-32b, minicpm-v-4.6, nemotron-15b). Llama.cpp GGUF Zerogpu path not yet wired (Bonus 3 / T6 GGUF). HF Space needs rebuild + HF_TOKEN secret.*

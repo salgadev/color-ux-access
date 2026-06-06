@@ -1,0 +1,90 @@
+[project]
+name = "color-ux-access"
+version = "0.1.0"
+description = "CVD accessibility audit: screenshot → 10-type colorblind simulation → WCAG 2.1 report via 32B VLM"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [{name = "NARWALL", email = "contact@narwall.tech"}]
+homepage = "https://github.com/salgadev/color-ux-access"
+repository = "https://github.com/salgadev/color-ux-access"
+keywords = ["accessibility", "colorblind", "wcag", "gradio", "vlm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+
+dependencies = [
+    "pillow>=10.0",
+    "daltonlens>=0.2.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "playwright>=1.40",
+    "pytest-playwright>=0.5.0",
+    "pytest>=8.0",
+    "colorspacious>=1.1.2",
+]
+space = [
+    "gradio>=6.0",
+    "spaces>=0.8",
+    'torch>=2.8.0',
+    "openai>=1.0",
+    "python-dotenv>=1.0",
+    "huggingface_hub==0.25.2",
+]
+modal = [
+    "modal>=0.70",
+    "fastapi[standard]>=0.120",
+    "gradio>=5.0",
+    "python-multipart>=0.0.20",
+    "openai>=1.0",
+]
+all = [
+    "color-ux-access[dev,space,modal]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "color_ux_access",
+    "app",
+    "vlm",
+    "tests",
+    "docs",
+    "pyproject.toml",
+    "pytest.ini",
+    "conftest.py",
+    "requirements.txt",
+    "requirements_space.txt",
+    "app_space.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.pytest-playwright]
+browser = "chromium"
+headless = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+fix = true
+show-fixes = true
