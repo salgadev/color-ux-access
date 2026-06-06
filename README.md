@@ -147,3 +147,4 @@ Key constraint: `huggingface_hub<0.26` required (Gradio 5.x depends on HfFolder,
 - [ ] **Demo video + social post** — required to qualify for hackathon
 - [ ] **Confirm NVIDIA Nemotron requirement** — asking organizers
 - [ ] **Transfer Space to hackathon org** — must move to `build-small-hackathon/color-ux-access`
+<!-- dummy commit to trigger Space rebuild with fixed requirements_space.txt -->
