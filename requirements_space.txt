@@ -12,6 +12,9 @@ spaces
 # VLM inference (OpenAI-compatible client for HF Router)
 openai>=1.0
 
+# Modal endpoint caller (Gradio API for VLM inference via Modal)
+requests
+
 # Image processing
 pillow
 numpy

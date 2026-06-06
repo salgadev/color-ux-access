@@ -6,27 +6,24 @@ Gradio app for colorblind accessibility testing, ready for hackathon submission.
 Architecture:
   - User uploads a screenshot (OS/browser screenshot tool → Gradio File)
   - CVD simulation runs locally (pure Python, no browser needed)
-  - VLM inference runs on Space GPU via @spaces.GPU(duration=120)
-  - HF Router API → swappable VLM backends (CohereLabs/aya-vision-32b, MiniCPM-V 4.6, ...)
+  - VLM inference via deployed Modal app (https://narwall-tech--color-ux-access-ui.modal.run/)
+  - Modal endpoint → upload_screenshot.remote() → vlm_inference_fn (A10G GPU) → HF Router → aya-vision-32b
   - WCAG 2.1 markdown report + CVD gallery displayed
 
 Requirements:
   - Python 3.12 (HF Spaces requirement)
-  - HF_TOKEN secret set in Space settings
-- spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via gr.__version__ at runtime)
+  - spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via gr.__version__ at runtime)
   - torch with CUDA libs
-  - openai, pillow, daltonlens
+  - openai, pillow, daltonlens, requests
 
 Deploy:
   1. Push to GitHub
   2. Create HF Space (SDK: Gradio, hardware: T4/mega or A10G)
-  3. Add HF_TOKEN secret in Space settings
+  3. Add MODAL_URL secret in Space settings
   4. Link to GitHub repo or upload this file directly
 
-Model Backends (swappable via dropdown):
-  - aya-vision-32b: CohereLabs/aya-vision-32b (default)
-  - minicpm-v-4.6: openbmb/mini-cpm-v-4_6 (OpenBMB $5K prize eligibility)
-  - nemotron-15b: nvidia/Nemotron-4-15B-base (NVIDIA prize eligibility)
+Note: HF_TOKEN in Space secrets is for Space management only.
+Inference goes through the Modal endpoint — no HF_TOKEN needed here.
 """
 
 import os
@@ -39,7 +36,7 @@ import gradio as gr
 from PIL import Image
 import numpy as np
 from daltonlens import simulate
-from openai import OpenAI  # noqa: F401 — imported here so mock can patch at module level
+import requests
 
 # ── CVD Simulators ────────────────────────────────────────────────────────────
 
@@ -154,96 +151,101 @@ def format_wcag_report(vlm_result: dict) -> str:
     return report
 
 
-# ── VLM Inference (Space GPU) ─────────────────────────────────────────────────
-#
-# First call takes 60-90s (model download + KV cache init).
-# Subsequent calls are fast (<5s).
+# ── Modal Endpoint Helper ──────────────────────────────────────────────────────
+# Inference runs via the deployed Modal app, not HF Router directly.
+# The Modal app (color_ux_access/modal_app.py) handles GPU/VLM internally.
+# Space secrets only need MODAL_URL — HF_TOKEN is for Space management only.
+
+_MODAL_URL = os.environ.get('MODAL_URL', 'https://narwall-tech--color-ux-access-ui.modal.run')
 
 
-def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
+def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
     """
-    Analyze a screenshot for WCAG color-accessibility issues.
-    Uses a swappable VLM backend via HF Router API on Space GPU.
+    Call the Modal Gradio endpoint's /analyze_screenshot API.
+    Upload image → POST predict → poll SSE for result.
 
     Args:
         image_bytes: PNG/JPEG bytes of the screenshot.
-        model: One of MODELS keys ("aya-vision-32b", "minicpm-v-4.6", "nemotron-15b").
-               Defaults to "aya-vision-32b".
+        timeout: Max seconds to wait for VLM inference result.
+
+    Returns:
+        WCAG JSON dict with keys: findings, passes, summary.
 
     Raises:
-        ValueError: If model is not in MODELS registry.
-
-    Runs inside @spaces.GPU(duration=120) — do not call this directly
-    from non-GPU functions. Gate it behind the decorator below.
+        RuntimeError: If upload, predict, or polling fails.
     """
-    if model not in MODELS:
-        available = ", ".join(sorted(MODELS.keys()))
-        raise ValueError(
-            f"Unknown model '{model}'. Available: {available}"
-        )
+    gradio_api = f"{_MODAL_URL}/gradio_api"
 
-    model_config = MODELS[model]
-    model_id = model_config["model_id"]
-
-    hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HF_API_TOKEN')
-    if not hf_token:
-        return {
-            'error': 'HF_TOKEN not set. Add it in Space Settings → Variables and Secrets.',
-            'findings': [],
-            'passes': False,
-        }
-
-    client = OpenAI(
-        base_url='https://router.huggingface.co/v1',
-        api_key=hf_token,
+    # Step 1: upload file → get server file path
+    upload_resp = requests.post(
+        f"{gradio_api}/upload",
+        files={'files': ('screenshot.png', image_bytes, 'image/png')},
+        timeout=30,
     )
+    if upload_resp.status_code != 200:
+        raise RuntimeError(f"Modal file upload failed: {upload_resp.status_code} {upload_resp.text[:100]}")
 
-    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+    file_paths = upload_resp.json()
+    if not file_paths or len(file_paths) == 0:
+        raise RuntimeError(f"Modal file upload returned no paths: {upload_resp.text[:100]}")
 
-    system_prompt = (
-        'You are an accessibility expert specializing in colorblind user experience. '
-        'Analyze screenshots for WCAG 2.1 compliance issues. '
-        'For each finding, cite the specific success criterion (1.1.1, 1.4.1, 1.4.3, or 1.4.11). '
-        'Output a JSON object with this structure:\n'
-        '{\n'
-        '  "findings": [\n'
-        '    {\n'
-        '      "type": "Low Contrast | Color Only Information | Missing Text Alternative | Insufficient Non-Text Contrast",\n'
-        '      "wcag_criterion": "1.4.1 | 1.4.3 | 1.1.1 | 1.4.11",\n'
-        '      "description": "...",\n'
-        '      "severity": "critical | serious | moderate",\n'
-        '      "location": "Top-left, center, etc."\n'
-        '    }\n'
-        '  ],\n'
-        '  "summary": "Overall assessment",\n'
-        '  "passes": true/false\n'
-        '}'
+    file_path = file_paths[0]  # e.g. "/tmp/gradio/.../test.png"
+
+    # Step 2: POST predict call → get event_id
+    predict_resp = requests.post(
+        f"{gradio_api}/call/analyze_screenshot",
+        json={'data': [{'path': file_path, 'meta': {'_type': 'gradio.FileData'}}]},
+        timeout=10,
     )
+    if predict_resp.status_code != 200:
+        raise RuntimeError(f"Modal predict call failed: {predict_resp.status_code} {predict_resp.text[:100]}")
 
-    response = client.chat.completions.create(
-        model=model_id,
-        messages=[
-            {
-                'role': 'user',
-                'content': [
-                    {'type': 'text', 'text': system_prompt},
-                    {
-                        'type': 'image_url',
-                        'image_url': {'url': f'data:image/png;base64,{image_b64}'},
-                    },
-                ],
-            }
-        ],
-        max_tokens=1024,
-        temperature=0.1,
-    )
+    event_id = predict_resp.json().get('event_id')
+    if not event_id:
+        raise RuntimeError(f"Modal predict returned no event_id: {predict_resp.text[:100]}")
 
-    raw = response.choices[0].message.content
-    # Strip markdown code fences if present
-    if raw.startswith('```'):
-        lines = raw.split('\n')
-        raw = '\n'.join(lines[1:-1])
-    return json.loads(raw)
+    # Step 3: poll SSE endpoint until result is ready
+    poll_url = f"{gradio_api}/call/analyze_screenshot/{event_id}"
+    with requests.get(poll_url, timeout=timeout, stream=True) as poll_resp:
+        if poll_resp.status_code != 200:
+            raise RuntimeError(f"Modal poll failed: {poll_resp.status_code}")
+
+        full_data = ''
+        for line in poll_resp.iter_lines():
+            if line:
+                decoded = line.decode('utf-8')
+                if decoded.startswith('data: '):
+                    full_data = decoded[6:]  # strip 'data: ' prefix
+
+        if not full_data:
+            raise RuntimeError("Modal poll returned no data")
+
+        result = json.loads(full_data)
+        # Gradio API wraps the result in a JSON array: [dict]
+        if isinstance(result, list):
+            result = result[0]
+        return result
+
+
+# ── VLM Inference (via Modal) ──────────────────────────────────────────────────
+
+def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
+    """
+    Analyze a screenshot for WCAG color-accessibility issues via Modal endpoint.
+
+    Args:
+        image_bytes: PNG/JPEG bytes of the screenshot.
+        model: Model backend key from MODELS dict (aya-vision-32b, minicpm-v-4.6, nemotron-15b).
+               Note: only aya-vision-32b is deployed on Modal; other options are for future use.
+
+    Returns:
+        WCAG JSON dict with keys: findings (list), passes (bool), summary (str).
+        On error, returns {'error': str, 'findings': [], 'passes': False}.
+    """
+    try:
+        return _call_modal_analyze(image_bytes)
+    except Exception as e:
+        return {'error': str(e), 'findings': [], 'passes': False}
 
 
 # ── Gradio App ────────────────────────────────────────────────────────────────
