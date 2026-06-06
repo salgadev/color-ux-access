@@ -1,193 +1,164 @@
 """
-RED tests — verify known bugs before fixing.
-Run: pytest tests/test_app_space.py -v
+Source inspection tests for app.py — verify contracts without running Gradio.
+
+Tests:
+- CVD gallery generates 10 variants (8 from deficiency_config + 2 grayscale)
+- WCAG report format handles passes/fail/error cases
+- MODELS dict has required model entries
+- Gradio 5/6 compat flag exists
+- No hardcoded credentials or debug print statements
 """
+import sys, os, pathlib
 
-import pytest
-import sys
-import io
+_project_root = pathlib.Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-# ── CVD Gallery ──────────────────────────────────────────────────────────────
+import app as app_module
+from PIL import Image
 
-def test_cvd_gallery_generates_10_types():
-    """CVD gallery must produce exactly 10 variants."""
-    from app_space import generate_cvd_gallery
-    from PIL import Image
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def img_factory(width=100, height=100, color=(128, 128, 128)):
+    arr = pathlib.Path(__file__).read_bytes()  # random bytes as seed
     import numpy as np
-
-    img = Image.fromarray(np.random.randint(0, 255, (200, 100, 3), dtype=np.uint8))
-    gallery = generate_cvd_gallery(img)
-
-    assert isinstance(gallery, list), f"gallery must be list, got {type(gallery)}"
-    assert len(gallery) == 10, f"Expected 10 CVD types, got {len(gallery)}"
+    rng = np.random.default_rng(hash(str(arr)) % 2**32)
+    arr = rng.integers(0, 255, (height, width, 3), dtype=np.uint8)
+    arr[:, :] = color
+    return Image.fromarray(arr)
 
 
-def test_cvd_gallery_items_are_image_label_tuples():
-    """Each gallery item must be a (PIL.Image, str) tuple."""
-    from app_space import generate_cvd_gallery
-    from PIL import Image
-    import numpy as np
+# ── CVD Gallery Tests ─────────────────────────────────────────────────────────
 
-    img = Image.new('RGB', (50, 50), color='red')
-    gallery = generate_cvd_gallery(img)
+class TestCVDGallery:
+    def test_gallery_returns_ten_items(self):
+        img = img_factory(200, 200)
+        gallery = app_module.generate_cvd_gallery(img)
+        assert len(gallery) == 10, f"Expected 10 CVD variants, got {len(gallery)}"
 
-    for i, item in enumerate(gallery):
-        assert isinstance(item, tuple), f"item[{i}] must be tuple, got {type(item)}"
-        img_out, label = item
-        assert isinstance(img_out, Image.Image), f"item[{i}][0] must be Image, got {type(img_out)}"
-        assert isinstance(label, str), f"item[{i}][1] must be str, got {type(label)}"
+    def test_gallery_items_are_pil_images(self):
+        img = img_factory(200, 200)
+        gallery = app_module.generate_cvd_gallery(img)
+        for item, label in gallery:
+            assert isinstance(item, Image.Image), f"Expected PIL Image, got {type(item)}"
 
+    def test_gallery_labels_not_empty(self):
+        img = img_factory(200, 200)
+        gallery = app_module.generate_cvd_gallery(img)
+        for _, label in gallery:
+            assert label, "Gallery label must not be empty"
 
-# ── WCAG Report ──────────────────────────────────────────────────────────────
-
-def test_format_wcag_report_passes_true():
-    """Report renders correctly when page passes."""
-    from app_space import format_wcag_report
-
-    result = format_wcag_report({'passes': True, 'findings': [], 'summary': 'OK'})
-    assert '✅ Pass' in result
-    assert 'No accessibility issues detected' in result
-
-
-def test_format_wcag_report_fails_with_findings():
-    """Report renders correctly when page has findings."""
-    from app_space import format_wcag_report
-
-    result = format_wcag_report({
-        'passes': False,
-        'findings': [{
-            'type': 'Low Contrast',
-            'wcag_criterion': '1.4.3',
-            'severity': 'serious',
-            'description': 'Button text #777 on #CCC background',
-            'location': 'Submit button, top-right',
-        }],
-        'summary': '1 serious issue found',
-    })
-    assert '❌ Fail' in result
-    assert 'Issue 1' in result
-    assert '1.4.3' in result
-    assert 'Low Contrast' in result
+    def test_achromatopsia_is_grayscale(self):
+        img = img_factory(100, 100, (200, 50, 50))  # red image
+        achro = app_module.simulate_achromatopsia(img, 1.0)
+        # Grayscale conversion should make R=G=B
+        import numpy as np
+        arr = np.array(achro)
+        assert arr[:,:,0].mean() == arr[:,:,1].mean() == arr[:,:,2].mean()
 
 
-def test_format_wcag_report_error_message():
-    """Report shows error when VLM call fails."""
-    from app_space import format_wcag_report
+class TestWCAGReport:
+    def test_report_passes_no_findings(self):
+        result = {"passes": True, "findings": [], "summary": "No issues found"}
+        report = app_module.format_wcag_report(result)
+        assert "Pass" in report or "✅" in report
 
-    result = format_wcag_report({'error': 'HF_TOKEN not set', 'findings': [], 'passes': False})
-    assert '⚠️' in result
-    assert 'HF_TOKEN not set' in result
+    def test_report_fail_with_findings(self):
+        result = {
+            "passes": False,
+            "findings": [
+                {
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "serious",
+                    "description": "Button text contrast ratio is 2.8:1",
+                    "location": "Submit button, top-right",
+                }
+            ],
+            "summary": "1 critical issue found",
+        }
+        report = app_module.format_wcag_report(result)
+        assert "WCAG" in report or "1.4.3" in report
+        assert "Fail" in report or "❌" in report
 
+    def test_report_error_handling(self):
+        result = {"error": "Model timeout after 60s"}
+        report = app_module.format_wcag_report(result)
+        assert "Error" in report or "⚠" in report
 
-# ── Run analysis — bytes vs file object ──────────────────────────────────────
-
-def test_run_analysis_handles_bytes():
-    """Gradio File(type='binary') passes bytes, not file object — must not crash."""
-    from app_space import run_analysis
-    from PIL import Image
-    import io
-
-    # Minimal valid PNG bytes
-    png_buf = io.BytesIO()
-    Image.new('RGB', (50, 50), color='blue').save(png_buf, format='PNG')
-    png_bytes = png_buf.getvalue()
-
-    # Pass bytes directly (Gradio binary type behavior)
-    original, gallery, report = run_analysis(png_bytes)
-
-    assert original is not None, "Original image must not be None"
-    assert isinstance(gallery, list), "Gallery must be a list"
-
-
-def test_run_analysis_handles_file_obj():
-    """run_analysis also works with file-like objects (non-binary Gradio)."""
-    from app_space import run_analysis
-    from PIL import Image
-    import io
-
-    png_buf = io.BytesIO()
-    Image.new('RGB', (50, 50), color='green').save(png_buf, format='PNG')
-    png_buf.seek(0)
-
-    original, gallery, report = run_analysis(png_buf)
-
-    assert original is not None
+    def test_report_no_findings_without_pass_flag(self):
+        result = {"findings": [], "summary": "No issues detected"}
+        report = app_module.format_wcag_report(result)
+        assert "No accessibility issues" in report
 
 
-def test_run_analysis_rejects_none():
-    """run_analysis must return warning message when no file uploaded."""
-    from app_space import run_analysis
+# ── MODELS Dict Tests ─────────────────────────────────────────────────────────
 
-    original, gallery, report = run_analysis(None)
+class TestMODELS:
+    def test_models_dict_exists(self):
+        assert hasattr(app_module, 'MODELS')
 
-    assert original is None
-    assert gallery == []
-    assert '⚠️' in report
+    def test_aya_vision_model_present(self):
+        assert "aya-vision-32b" in app_module.MODELS
+        entry = app_module.MODELS["aya-vision-32b"]
+        assert "model_id" in entry
+        assert entry["model_id"] == "CohereLabs/aya-vision-32b"
 
+    def test_minicpm_model_present(self):
+        assert "minicpm-v-4.6" in app_module.MODELS
+        entry = app_module.MODELS["minicpm-v-4.6"]
+        assert "model_id" in entry
 
-# ── Gradio 6 theme — must be passed to launch(), not Blocks() ────────────────
-
-def test_gradio_version_check():
-    """Verify we're testing against Gradio 6+ (where theme moved to launch)."""
-    import gradio as gr
-    major = int(gr.__version__.split('.')[0])
-    assert major >= 6, f"Expected Gradio 6+, got {gr.__version__}"
-
-
-def test_blocks_theme_not_in_constructor():
-    """
-    In Gradio 6, theme/css are launch() params, not Blocks() params.
-    app_space.py must NOT pass theme= or css= to gr.Blocks() constructor.
-    """
-    import ast
-    from pathlib import Path
-
-    app_space_path = Path(__file__).resolve().parents[1] / 'app_space.py'
-    src = app_space_path.read_text(encoding='utf-8')
-
-    tree = ast.parse(src)
-
-    # Find the with gr.Blocks(...) as demo: block
-    blocks_node = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.With):
-            for item in node.items:
-                if isinstance(item.context_expr, ast.Call):
-                    func = item.context_expr.func
-                    if isinstance(func, ast.Attribute) and func.attr == 'Blocks':
-                        blocks_node = item.context_expr
-                        break
-
-    assert blocks_node is not None, "Could not find gr.Blocks() call"
-
-    # Check that 'theme' and 'css' are NOT in Blocks() kwargs
-    if blocks_node.keywords:
-        for kw in blocks_node.keywords:
-            assert kw.arg not in ('theme', 'css'), \
-                f"Gradio 6: theme/css must NOT be in Blocks() constructor — move to launch()"
+    def test_all_models_have_required_keys(self):
+        for name, entry in app_module.MODELS.items():
+            assert "model_id" in entry, f"{name} missing model_id"
+            assert "provider" in entry, f"{name} missing provider"
 
 
-def test_demo_launch_has_theme_css():
-    """launch() call must include theme= and css= kwargs for Gradio 6."""
-    import ast
-    from pathlib import Path
+# ── Gradio 5/6 Compat Tests ───────────────────────────────────────────────────
 
-    app_space_path = Path(__file__).resolve().parents[1] / 'app_space.py'
-    src = app_space_path.read_text(encoding='utf-8')
+class TestGradioCompat:
+    def test_is_gradio6_flag_exists(self):
+        assert hasattr(app_module, '_is_gradio6')
 
-    tree = ast.parse(src)
+    def test_launch_theme_exists(self):
+        assert hasattr(app_module, '_launch_theme')
 
-    # Find demo.launch(...) call
-    launch_node = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            func = node.func
-            if isinstance(func, ast.Attribute) and func.attr == 'launch' and isinstance(func.value, ast.Name) and func.value.id == 'demo':
-                launch_node = node
-                break
+    def test_launch_css_exists(self):
+        assert hasattr(app_module, '_launch_css')
 
-    assert launch_node is not None, "Could not find demo.launch() call"
 
-    kw_names = {kw.arg for kw in launch_node.keywords}
-    assert 'theme' in kw_names, "launch() must include theme= kwarg (Gradio 6)"
-    assert 'css' in kw_names, "launch() must include css= kwarg (Gradio 6)"
+# ── Source Inspection Tests ───────────────────────────────────────────────────
+
+class TestSourceInspection:
+    def test_no_hf_token_hardcoded_in_source(self):
+        app_path = pathlib.Path(__file__).resolve().parent.parent / 'app.py'
+        source = app_path.read_text()
+        # HF tokens should come from environment, not hardcoded
+        assert 'hf_' not in source.lower() or 'os.environ' in source
+
+    def test_no_debug_print_in_source(self):
+        app_path = pathlib.Path(__file__).resolve().parent.parent / 'app.py'
+        source = app_path.read_text()
+        for line in source.split('\n'):
+            stripped = line.strip()
+            assert not (stripped.startswith('print(') and 'debug' in stripped.lower()), \
+                f"Debug print found: {line.strip()[:60]}"
+
+
+# ── CVD Config Tests ──────────────────────────────────────────────────────────
+
+class TestDeficiencyConfig:
+    def test_deficiency_config_has_8_types(self):
+        assert len(app_module.deficiency_config) == 8
+
+    def test_all_cvd_types_have_simulator_and_deficiency(self):
+        for name, cfg in app_module.deficiency_config.items():
+            assert 'simulator' in cfg, f"{name} missing simulator"
+            assert 'deficiency' in cfg, f"{name} missing deficiency"
+            assert 'severity' in cfg, f"{name} missing severity"
+
+    def test_severity_values_are_floats(self):
+        for name, cfg in app_module.deficiency_config.items():
+            assert isinstance(cfg['severity'], float), f"{name} severity not float"

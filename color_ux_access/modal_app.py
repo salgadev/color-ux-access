@@ -50,9 +50,9 @@ def vlm_inference_fn(image_bytes: bytes, prompt: str = "") -> dict:
     Returns:
         JSON-serializable dict with WCAG findings
     """
-    hf_token = os.environ.get("HF_TOKEN")
+    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HF_API_TOKEN")
     if not hf_token:
-        raise RuntimeError("HF_TOKEN environment variable not set")
+        raise RuntimeError("HF_TOKEN / HF_API_TOKEN environment variable not set")
 
     from openai import OpenAI
 
