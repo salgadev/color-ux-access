@@ -20,7 +20,7 @@ classifiers = [
 
 dependencies = [
     "pillow>=10.0",
-    "daltonlens>=0.2.0",
+    "daltonlens>=0.1.0",
     "numpy>=1.26",
 ]
 
@@ -32,12 +32,12 @@ dev = [
     "colorspacious>=1.1.2",
 ]
 space = [
-    "gradio>=6.0",
+    "gradio>=5.0",
     "spaces>=0.8",
     'torch>=2.8.0',
     "openai>=1.0",
     "python-dotenv>=1.0",
-    "huggingface_hub==0.25.2",
+    "numpy>=1.26",
 ]
 modal = [
     "modal>=0.70",
@@ -57,7 +57,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.sdist]
 include = [
     "color_ux_access",
-    "app",
     "vlm",
     "tests",
     "docs",
@@ -65,8 +64,8 @@ include = [
     "pytest.ini",
     "conftest.py",
     "requirements.txt",
-    "requirements_space.txt",
-    "app_space.py",
+    "app.py",
+    "AGENTS.md",
 ]
 
 [tool.pytest.ini_options]
@@ -78,10 +77,6 @@ addopts = "-v --tb=short"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
-
-[tool.pytest-playwright]
-browser = "chromium"
-headless = true
 
 [tool.ruff]
 line-length = 100
