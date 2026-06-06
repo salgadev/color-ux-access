@@ -13,7 +13,7 @@ Architecture:
 Requirements:
   - Python 3.12 (HF Spaces requirement)
   - HF_TOKEN secret set in Space settings
-  - gradio>=6.0, spaces
+- spaces (gradio==5.0.0 is SDK-forced — Gradio 5/6 compat via gr.__version__ at runtime)
   - torch with CUDA libs
   - openai, pillow, daltonlens
 
@@ -255,17 +255,19 @@ _theme_css = """
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
 """
 
-try:
-    _ = gr.themes.Base(primary_hue='blue', secondary_hue='gray', neutral_hue='gray')
-    # Gradio 6 — theme creation succeeded. Theme goes to launch(), not Blocks.
-    _launch_theme = None   # Signal: don't pass theme to Blocks (Gradio 6 pattern)
-    _launch_css = None     # CSS also goes to launch() in Gradio 6
-    _is_gradio6 = True
-except Exception:
-    # Gradio 5 — use Blocks constructor for theme (Gradio 5 pattern)
+# Gradio version detection: SDK installs 5.0.0, local dev uses 6.x.
+# Theme/css go to Blocks constructor (Gradio 5) or launch() (Gradio 6).
+_gradio_version = tuple(int(x) for x in gr.__version__.split('.')[:2])
+_is_gradio6 = _gradio_version >= (6, 0)
+
+if _is_gradio6:
+    # Gradio 6 — theme/css go to launch(), not Blocks constructor.
+    _launch_theme = None
+    _launch_css = None
+else:
+    # Gradio 5 — use Blocks constructor for theme and CSS.
     _launch_theme = gr.themes.Base(primary_hue='blue', secondary_hue='gray', neutral_hue='gray')
     _launch_css = _theme_css
-    _is_gradio6 = False
 
 with gr.Blocks(
     title='Color-UX-Access',
