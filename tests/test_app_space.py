@@ -140,9 +140,10 @@ def test_blocks_theme_not_in_constructor():
     app_space.py must NOT pass theme= or css= to gr.Blocks() constructor.
     """
     import ast
+    from pathlib import Path
 
-    with open('app_space.py', 'r') as f:
-        src = f.read()
+    app_space_path = Path(__file__).resolve().parents[1] / 'app_space.py'
+    src = app_space_path.read_text(encoding='utf-8')
 
     tree = ast.parse(src)
 
@@ -169,9 +170,10 @@ def test_blocks_theme_not_in_constructor():
 def test_demo_launch_has_theme_css():
     """launch() call must include theme= and css= kwargs for Gradio 6."""
     import ast
+    from pathlib import Path
 
-    with open('app_space.py', 'r') as f:
-        src = f.read()
+    app_space_path = Path(__file__).resolve().parents[1] / 'app_space.py'
+    src = app_space_path.read_text(encoding='utf-8')
 
     tree = ast.parse(src)
 
