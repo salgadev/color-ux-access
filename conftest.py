@@ -18,12 +18,16 @@ from pathlib import Path
 
 import pytest
 import numpy as np
+from dotenv import load_dotenv
 from PIL import Image
 
 # Ensure project root is on path
 _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+# Load .env so env-gated integration tests (modal endpoints, etc.) work locally
+load_dotenv(_project_root / ".env")
 
 
 # ── Image Fixtures ────────────────────────────────────────────────────────────
