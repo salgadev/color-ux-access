@@ -21,6 +21,9 @@ classifiers = [
 dependencies = [
     "pillow>=10.0",
     "numpy>=1.26",
+    "gradio>=6.17.3",
+    "daltonlens>=0.1.5",
+    "requests>=2.34.2",
 ]
 
 [project.optional-dependencies]
