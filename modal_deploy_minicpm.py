@@ -10,7 +10,7 @@ vllm_image = (
     .pip_install("torch>=2.4.0")
 )
 
-MODEL_ID = "openbmb/MiniCPM-V-2_6"
+MODEL_ID = "openbmb/MiniCPM-V-4.6"
 
 
 @app.cls(
@@ -18,12 +18,20 @@ MODEL_ID = "openbmb/MiniCPM-V-2_6"
     scaledown_window=300,
     timeout=600,
     image=vllm_image,
+    secrets=[modal.Secret.from_name("hf-token-minicpm")],
 )
 class MiniCPMVLLM:
     @modal.enter()
     def start_engine(self):
         from vllm import LLM
         from vllm.sampling_params import SamplingParams
+        import os
+
+        hf_token = os.getenv("HF_TOKEN")
+        if hf_token:
+            print(f"HF_TOKEN is set (starts with: {hf_token[:5]})")
+        else:
+            print("HF_TOKEN is NOT set")
 
         self.llm = LLM(
             model=MODEL_ID,
@@ -41,13 +49,16 @@ class MiniCPMVLLM:
 
     @modal.method()
     async def generate(self, prompt: str, image_base64: str = None) -> str:
+        # Build message content
+        content = []
+        if image_base64:
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}})
+        content.append({"type": "text", "text": prompt})
+
         messages = [
             {
                 "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
-                    {"type": "text", "text": prompt},
-                ]
+                "content": content,
             }
         ]
 
@@ -62,7 +73,7 @@ class MiniCPMVLLM:
 @modal.fastapi_endpoint(method="POST")
 async def inference(request: dict):
     prompt = request.get("prompt", "")
-    image_b64 = request.get("image_base64", None)
+    image_b64 = request.get("image_base64")
     infer = MiniCPMVLLM()
     result = infer.generate.remote(prompt, image_b64)
     return {"response": result}
