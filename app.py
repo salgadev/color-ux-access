@@ -37,11 +37,15 @@ Local setup:
 HF Space deploy:
   1. Push to GitHub
   2. Create HF Space (SDK: Gradio, hardware: T4/mega or A10G)
-  3. Add MODAL_URL secret in Space settings
+  3. Add MODAL_URL secret in Space settings (or MODAL_INFERENCE_BASE_URL + MODAL_INFERENCE_API_KEY)
   4. Link to GitHub repo
 
 Note: HF_TOKEN in Space secrets is for Space management only.
 Inference goes through the Modal endpoint — no HF_TOKEN needed here.
+
+Two VLM modes:
+  A) Legacy  — MODAL_URL (Gradio API endpoint) — falls back automatically
+  B) Provider — MODAL_INFERENCE_BASE_URL + MODAL_INFERENCE_API_KEY (OpenAI-compatible)
 """
 
 import os
@@ -198,7 +202,11 @@ def _capture_url(url: str) -> bytes:
 # ── Modal Endpoint Helper ──────────────────────────────────────────────────────
 # Inference runs via the deployed Modal app, not HF Router directly.
 # The Modal app (color_ux_access/modal_app.py) handles GPU/VLM internally.
-# Space secrets only need MODAL_URL — HF_TOKEN is for Space management only.
+#
+# Two modes (selectable by env var):
+#   Legacy mode (default):     MODAL_URL
+#   Provider mode (OpenAI):    MODAL_INFERENCE_BASE_URL + MODAL_INFERENCE_API_KEY
+# If MODAL_INFERENCE_API_KEY is not set, analyze_with_vlm falls back to legacy.
 
 _MODAL_URL = os.environ.get('MODAL_URL', 'https://narwall-tech--color-ux-access-ui.modal.run')
 
@@ -275,7 +283,12 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
 def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
     """
     Analyze a screenshot for WCAG color-accessibility issues via Modal Inference Provider.
+    Falls back to the legacy Gradio endpoint (_call_modal_analyze) if the new
+    MODAL_INFERENCE_API_KEY environment variable is not configured.
     """
+    if not _MODAL_INFERENCE_API_KEY:
+        return _call_modal_analyze(image_bytes)
+
     try:
         # Prepare OpenAI client pointing to Modal inference endpoint
         client = OpenAI(
