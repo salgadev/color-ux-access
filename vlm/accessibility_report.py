@@ -85,50 +85,67 @@ class AccessibilityReport:
         return issues
     
     def _map_to_wcag(self, issue_type: str) -> List[str]:
-        """Map issue type to WCAG success criteria"""
+        """Map issue type to WCAG success criteria."""
         issue_type_lower = issue_type.lower()
         wcag_refs = []
-        
-        if 'contrast' in issue_type_lower:
-            wcag_refs.extend(['1.4.3', '1.4.6'])  # Contrast (Minimum and Enhanced)
-        if 'color-dependent' in issue_type_lower or 'color dependent' in issue_type_lower:
-            wcag_refs.append('1.4.1')  # Use of Color
-        if 'ui' in issue_type_lower or 'component' in issue_type_lower or 'button' in issue_type_lower or 'input' in issue_type_lower:
+
+        if 'contrast' in issue_type_lower and 'ui' in issue_type_lower:
             wcag_refs.append('1.4.11')  # Non-text Contrast
-            
+        if 'contrast' in issue_type_lower and 'text' in issue_type_lower:
+            wcag_refs.extend(['1.4.3', '1.4.6'])  # Contrast (Minimum and Enhanced)
+        if 'color-only' in issue_type_lower or 'color only' in issue_type_lower:
+            wcag_refs.append('1.4.1')  # Use of Color
+        if 'color-dependent' in issue_type_lower or 'color dependent' in issue_type_lower:
+            wcag_refs.append('1.4.1')
+        if 'ui' in issue_type_lower or 'component' in issue_type_lower or 'button' in issue_type_lower or 'input' in issue_type_lower:
+            if '1.4.11' not in wcag_refs:
+                wcag_refs.append('1.4.11')  # Non-text Contrast
+
         return wcag_refs if wcag_refs else ['1.4.3']  # Default to contrast check
-    
+
     def _assess_severity(self, issue_type: str, description: str) -> str:
-        """Assess severity based on issue type and description"""
+        """Assess severity based on issue type and description."""
         issue_type_lower = issue_type.lower()
         desc_lower = description.lower()
-        
-        # High severity indicators
+
+        # Critical: blocks core task completion
         if any(word in issue_type_lower for word in ['critical', 'severe', 'major']):
-            return 'high'
-        if any(word in desc_lower for word in ['unreadable', 'invisible', 'cannot see', 'missing']):
-            return 'high'
+            return 'critical'
+        if any(word in desc_lower for word in [
+            'cannot submit', 'cannot complete', 'form submission blocked',
+            'invisible', 'unreadable', 'cannot see', 'cannot distinguish',
+            'error state invisible', 'no way to tell',
+        ]):
+            return 'critical'
+
+        # Serious: significant confusion or delay
+        if any(word in issue_type_lower for word in ['serious', 'error state', 'status indicator']):
+            return 'serious'
+        if any(word in desc_lower for word in [
+            'difficult', 'hard to see', 'low visibility', 'confusing',
+            'cannot identify', 'cannot tell which', 'ambiguous',
+        ]):
+            return 'serious'
+
+        # Moderate: workaround exists
+        if any(word in issue_type_lower for word in ['moderate', 'medium']):
+            return 'moderate'
+        if any(word in desc_lower for word in ['minor', 'slight', 'could be better']):
+            return 'moderate'
+
+        # Contrast-specific: extract ratio if mentioned
         if 'contrast' in issue_type_lower:
-            # Extract contrast ratio if mentioned
-            import re
             contrast_match = re.search(r'(\d+(?:\.\d+)?):1', desc_lower)
             if contrast_match:
                 ratio = float(contrast_match.group(1))
                 if ratio < 3.0:
-                    return 'high'
+                    return 'critical'
                 elif ratio < 4.5:
-                    return 'medium'
+                    return 'serious'
                 else:
-                    return 'low'
-        
-        # Medium severity indicators
-        if any(word in issue_type_lower for word in ['moderate', 'medium']):
-            return 'medium'
-        if any(word in desc_lower for word in ['difficult', 'hard', 'low visibility']):
-            return 'medium'
-            
-        # Default to low for minor issues
-        return 'low'
+                    return 'moderate'
+
+        return 'moderate'  # Default
     
     def _parse_text_analysis(self, text: str) -> List[Dict[str, Any]]:
         """Parse free-text VLM analysis into structured issues"""
