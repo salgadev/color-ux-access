@@ -412,6 +412,7 @@ dependencies = [
     { name = "gradio" },
     { name = "modal" },
     { name = "numpy" },
+    { name = "openai" },
     { name = "pillow" },
     { name = "requests" },
 ]
@@ -455,6 +456,7 @@ requires-dist = [
     { name = "modal", specifier = ">=1.4.3" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.70" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "openai", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'modal'", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'space'", specifier = ">=1.0" },
     { name = "pillow", specifier = ">=10.0" },
