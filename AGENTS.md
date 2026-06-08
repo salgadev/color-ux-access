@@ -5,55 +5,62 @@
 ## What This Project Is
 
 A Gradio app that tests any webpage screenshot for colorblind accessibility issues.
-Pipeline: screenshot → 10-type CVD simulation (DaltonLens) → VLM WCAG 2.1 audit → report.
 
-**Entry point:** `app.py` (root) — single file, Gradio 5/6 compatible.
-**VLM:** CohereLabs/aya-vision-32b via Modal endpoint (GPU inference).
-**CVD:** 10 types — deuteranopia, protanopia, tritanopia, deuteranomaly, protanomaly, tritanomaly,
-severe_deuteranopia, severe_protanopia, achromatopsia, achromatomaly.
+**Pipeline:** screenshot → 10-type CVD simulation (DaltonLens) → VLM WCAG 2.1 audit → report.
+
+- **Entry point:** `app.py` (root) — single file, Gradio 5/6 compatible.
+- **VLM:** `CohereLabs/aya-vision-32b` via Modal endpoint (GPU inference).
+- **CVD:** 10 types — deuteranopia, protanopia, tritanopia, deuteranomaly, protanomaly, tritanomaly, severe_deuteranopia, severe_protanopia, achromatopsia, achromatomaly.
 
 ## Agent Behavior & Constraints
 
 ### General Principles
-- **No hardcoding**: Avoid hardcoded field names, dates, URLs, or element labels. Write fixes in relative terms so they work on any unfamiliar site.
-- **Prefer framework-level solutions**: Prioritize generic, reusable fixes over one-off patches for specific sites.
-- **Test locally, think globally**: While testing may occur on the Parks Canada reservation site, solutions must generalize to any site.
-- **Consolidate, don't delete**: When modifying files, prefer consolidation over deletion. Ask first if unsure.
+
+- **No hardcoding:** Avoid hardcoded field names, dates, URLs, or element labels. Write fixes in relative terms so they work on any unfamiliar site.
+- **Prefer framework-level solutions:** Prioritize generic, reusable fixes over one-off patches for specific sites.
+- **Test locally, think globally:** While testing may occur on the Parks Canada reservation site, solutions must generalize to any site.
+- **Consolidate, don't delete:** When modifying files, prefer consolidation over deletion. Ask first if unsure.
 
 ### Environment & Tools
-- **OS**: Windows (10/11). Use `python` (not `python3` to avoid Microsoft Store prompt). Unix tools available via Git-Bash/MSYS.
-- **Paths**: Prefer project-local paths. Validate `HERMES_HOME` environment variable for Hermes-related paths.
+
+- **OS:** Windows (10/11). Use `python` (not `python3` to avoid Microsoft Store prompt). Unix tools available via Git-Bash/MSYS.
+- **Paths:** Prefer project-local paths. Validate `HERMES_HOME` environment variable for Hermes-related paths.
   - Hermes config/data: `G:\AI\HERMES`
   - Hermes CLI: `C:\Users\socd0\AppData\Local\hermes\hermes-agent`
-- **Python**: Use the project's virtual environment (`.venv`) when available.
-- **Gradio ghost processes**: Be aware of and clean up Gradio ghost processes (see `hermes-ghost-processes` skill if needed).
+- **Python:** Use the project's virtual environment (`.venv`) when available.
+- **Gradio ghost processes:** Be aware of and clean up Gradio ghost processes (see `hermes-ghost-processes` skill if needed).
 
 ### Communication & Reporting
-- **Updates**: Prefer concise technical updates—direct confirmation of working systems over narrative explanations.
-- **Primary channel**: Telegram for updates; cron pings are welcome.
-- **Voice-over narration**: For test walkthroughs, prefer post-process voice-over narration generated from test logs over live TTS during execution.
+
+- **Updates:** Prefer concise technical updates—direct confirmation of working systems over narrative explanations.
+- **Primary channel:** Telegram for updates; cron pings are welcome.
+- **Voice-over narration:** For test walkthroughs, prefer post-process voice-over narration generated from test logs over live TTS during execution.
 
 ### Development Practices
-- **TDD**: Tests are enforced—write tests first. If setup is missing, ping for assistance.
-- **Commits**: Make small, focused commits with clear messages.
-- **Documentation**: Update README.md and other documentation as needed.
-- **Secrets**: Never hardcode API keys, tokens, or passwords. Use environment variables or secure secret stores.
-- **License**: The project is open source (see LICENSE file). Maintain compliance.
+
+- **TDD:** Tests are enforced—write tests first. If setup is missing, ping for assistance.
+- **Commits:** Make small, focused commits with clear messages.
+- **Documentation:** Update `README.md` and other documentation as needed.
+- **Secrets:** Never hardcode API keys, tokens, or passwords. Use environment variables or secure secret stores.
+- **License:** The project is open source (see `LICENSE` file). Maintain compliance.
 
 ### Specific to This Repository
-- **Model Size**: Total parameters across all models used must be ≤ 32 billion (HF Build Small Hackathon constraint).
-- **Gradio Requirement**: The app must be a Gradio app (not Streamlit, FastAPI, etc.).
-- **Deployment**: If deploying to Hugging Face Spaces, must be under the `build-small-hackathon` organization.
-- **Badges**: Only enforce badge-specific rules if the badge is claimed (see `pr_compliance_checklist.yaml` for details).
 
-### Key Conventions
+- **Model Size:** Total parameters across all models used must be ≤ 32 billion (HF Build Small Hackathon constraint).
+- **Gradio Requirement:** The app must be a Gradio app (not Streamlit, FastAPI, etc.).
+- **Deployment:** If deploying to Hugging Face Spaces, must be under the `build-small-hackathon` organization.
+- **Badges:** Only enforce badge-specific rules if the badge is claimed (see `pr_compliance_checklist.yaml` for details).
 
-#### Environment
-- **Local dev:** `uv sync --python 3.12` — all deps via pyproject.toml + uv.lock.
+## Key Conventions
+
+### Environment
+
+- **Local dev:** `uv sync --python 3.12` — all deps via `pyproject.toml` + `uv.lock`.
 - **HF Spaces:** `requirements.txt` is generated by `uv export --format requirements-txt`, never hand-edited.
-- **Never** `source .venv/activate` — use `uv run` instead.
+- **Never source `.venv/activate`** — use `uv run` instead.
 
-#### Dependency changes
+### Dependency changes
+
 ```bash
 uv add some-package          # or edit pyproject.toml manually
 uv sync                      # updates uv.lock
@@ -61,13 +68,15 @@ uv export --format requirements-txt --output-file requirements.txt  # regenerate
 git commit pyproject.toml uv.lock requirements.txt
 ```
 
-#### Testing
-- **HF Space constraint:** containers cannot run a browser. Tests use source inspection only.
-- **Playwright** is for local URL capture (`python app.py --url`), not for CI.
-- **ALWAYS use `uv run pytest`** — ensures the project venv is used, NOT the global Python. Running `python -m pytest` directly will use Hermes Agent's global environment and may cause dependency conflicts.
-- **No VLM calls** in tests — use `mock_vlm_factory` from `conftest.py`.
+### Testing
 
-#### File structure
+- **HF Space constraint:** containers cannot run a browser. Tests use source inspection only.
+- **Image input:** The app expects a screenshot image to be uploaded directly by the user. No URL capture or browser automation is needed.
+- **ALWAYS use `uv run pytest`** — ensures the project venv is used, NOT the global Python. Running `python -m pytest` directly will use Hermes Agent's global environment and may cause dependency conflicts.
+- **No VLM calls in tests** — use `mock_vlm_factory` from `conftest.py`.
+
+### File structure
+
 ```
 app.py              # Gradio app (root — HF Space entrypoint)
 color_ux_access/    # package: cvd_sim, capture, modal_app
@@ -78,12 +87,14 @@ pyproject.toml      # source of truth (local dev / CI)
 requirements.txt    # generated (Spaces deployment)
 ```
 
-#### Gradio version handling
+### Gradio version handling
+
 - HF Spaces SDK installs Gradio 5.x; local dev uses 6.x.
 - `app.py` handles this at runtime via `_is_gradio6` check.
 - Theme/CSS go to `Blocks()` constructor (Gradio 5) or `launch()` (Gradio 6).
 
-#### VLM backends
+### VLM backends
+
 `MODELS` dict in `app.py` supports swappable backends:
 - `aya-vision-32b` (default, Cohere prize)
 - `minicpm-v-4.6` (OpenBMB prize, ~4B params)
@@ -91,10 +102,10 @@ requirements.txt    # generated (Spaces deployment)
 
 ## Important Rules
 
-1. **Do not** install packages globally or run `pip install` outside uv — pollutes Hermes Agent's environment.
-2. **HF Spaces does not read pyproject.toml** — always regenerate requirements.txt after dependency changes.
-3. **Playwright is optional** — only needed for `--url` URL capture mode, not for the Space itself.
-4. **Tests must not call the VLM** — mock it with `mock_vlm_factory` from conftest.
+1. Do not install packages globally or run `pip install` outside `uv` — pollutes Hermes Agent's environment.
+2. HF Spaces does not read `pyproject.toml` — always regenerate `requirements.txt` after dependency changes.
+3. The app expects a screenshot image to be uploaded directly — no URL capture or browser automation is needed.
+4. Tests must not call the VLM — mock it with `mock_vlm_factory` from `conftest`.
 
 ## Documentation
 
@@ -107,7 +118,17 @@ requirements.txt    # generated (Spaces deployment)
 | `docs/CVD_USER_AUDIT_MODEL.md` | CVD audit methodology (English) |
 | `docs/EVALUATION.md` | Sponsor prize matrix |
 
-### Agent-Specific Workflows
+## Agent-Specific Workflows
+
 When operating as an agent (e.g., Hermes Agent) in this repository:
+
 1. Load relevant skills before acting (e.g., `qodo-code-review`, `hermes-agent`, `software-development`).
-2. Use the `
+2. Use the `plan` skill to outline your approach before writing code.
+3. Break down tasks into small, verifiable steps using TDD.
+4. Regularly consult `docs/` for implementation details.
+5. Verify changes with `uv run pytest` before committing.
+6. Keep commits atomic and messages descriptive.
+7. Update documentation alongside code changes.
+8. Check for Gradio ghost processes after running tests locally.
+9. Never commit secrets—use `.env.example` for template.
+10. When in doubt, prioritize generalization over site-specific fixes.

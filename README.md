@@ -19,30 +19,7 @@ dependencies: requirements_space.txt
 
 **Live:** [salgadev-color-ux-access.hf.space](https://salgadev-color-ux-access.hf.space)
 **Code:** [github.com/salgadev/color-ux-access](https://github.com/salgadev/color-ux-access)
-**Built for:** [NARWALL](https://narwall.tech) — automated accessibility testing via screen-reader and keyboard simulation.
-
----
-
-## Quick Start
-
-```bash
-git clone https://github.com/salgadev/color-ux-access.git
-cd color-ux-access
-
-# Isolated venv (preventsHermes Agent environment interference)
-uv venv --python 3.12
-source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
-
-uv pip install -e ".[dev]"
-playwright install chromium
-
-cp .env.example .env
-# Add HF_TOKEN=hf_... from huggingface.co/settings/tokens
-
-pytest -m smoke        # fast: imports + build checks
-pytest                 # full suite (smoke + pipeline, no slow)
-python app/app.py      # local dev (URL input, auto-screenshot)
-```
+**Built for:** [NARWALL](https://narwall.tech) — automated accessibility testing.
 
 ---
 
@@ -52,34 +29,19 @@ python app/app.py      # local dev (URL input, auto-screenshot)
 Screenshot (file upload or URL capture)
        │
        ▼
-┌─────────────────────────────────────┐
-│  Stage 1: CVD Simulation (CPU)      │
-│  10 variants: deuteranopia,         │
-│  protanopia, tritanopia,            │
-│  deuteranomaly, protanomaly,        │
-│  tritanomaly, severe_deuteranopia,  │
-│  severe_protanopia, achromatopsia,  │
-│  achromatomaly                      │
-└─────────────────────────────────────┘
+Stage 1: CVD Simulation (CPU) — 10 variants via DaltonLens
        │
        ▼
-┌─────────────────────────────────────┐
-│  Stage 2: VLM Inference (GPU)       │
-│  CohereLabs/aya-vision-32b via      │
-│  Hugging Face Router API            │
-│  → WCAG 2.1 JSON findings           │
-└─────────────────────────────────────┘
+Stage 2: VLM Inference (GPU) — CohereLabs/aya-vision-32b → WCAG 2.1 JSON
        │
        ▼
-┌─────────────────────────────────────┐
-│  Stage 3: WCAG Report (Markdown)    │
-│  Severity · WCAG criterion ·        │
-│  description · remediation          │
-└─────────────────────────────────────┘
+Stage 3: WCAG Report — Severity · Criterion · Description · Remediation
 ```
 
 **VLM:** [CohereLabs/aya-vision-32b](https://huggingface.co/CohereLabs/aya-vision-32b) via HF Router (OpenAI-compatible API).
 **CVD:** 10 types via DaltonLens (Machado2009, Vienot1999, Brettel1997) + Rec.709 grayscale for achromatopsia.
+
+See `docs/ARCHITECTURE.md` for detailed pipeline internals.
 
 ---
 
@@ -95,8 +57,25 @@ Screenshot (file upload or URL capture)
 | Tritanomaly | Blue-yellow (weak) | rare |
 | Severe Deuteranopia | Full green-deficient | — |
 | Severe Protanopia | Full red-deficient | — |
-| Achromatopsia | Complete grayscale (rod monochromacy) | ~0.003% |
+| Achromatopsia | Complete grayscale | ~0.003% |
 | Achromatomaly | Partial grayscale | rare |
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/salgadev/color-ux-access.git
+cd color-ux-access
+uv venv --python 3.12
+source .venv/Scripts/activate
+uv pip install -e ".[dev]"
+cp .env.example .env   # add HF_TOKEN
+pytest -m smoke         # verify setup
+python app/app.py       # launch locally
+```
+
+See `docs/DEVELOPMENT.md` for full setup, dependency groups, and git workflow.
 
 ---
 
@@ -104,10 +83,12 @@ Screenshot (file upload or URL capture)
 
 | Doc | What it covers |
 |-----|----------------|
-| `docs/DEVELOPMENT.md` | Setup, uv venv, testing, git workflow |
-| `docs/ARCHITECTURE.md` | System design, CVD pipeline, VLM prompt |
-| `docs/DEPLOYMENT.md` | HF Space deploy, Modal deploy, sponsor prizes |
+| `docs/ARCHITECTURE.md` | System design, CVD pipeline, VLM prompt, Gradio 6 compat |
+| `docs/DEVELOPMENT.md` | Setup, uv venv, dep groups, git workflow, code style |
 | `docs/TESTING.md` | Test markers, fixtures, TDD pattern |
+| `docs/DEPLOYMENT.md` | HF Space + Modal deploy, known issues |
+| `docs/EVALUATION.md` | Sponsor prize matrix (full detail) |
+| `docs/CVD_USER_AUDIT_MODEL.md` | CVD audit methodology (EN/ES) |
 
 ---
 
@@ -116,35 +97,24 @@ Screenshot (file upload or URL capture)
 | Sponsor | Prize | Status |
 |---------|-------|--------|
 | HuggingFace | $15,000 | ✅ Eligible — top project |
-| OpenBMB (MiniCPM-V 4.6 swap) | $10,000 | 🔲 One-line model swap → $5K |
-| Modal | $250 credits | ✅ Deployed |
+| OpenBMB (MiniCPM-V 4.6 swap) | $10,000 | 🔲 One-line model swap |
+| Modal | $250 credits | ✅ Already deployed |
 | Cohere | Prize support | ✅ Using aya-vision-32b |
-| NVIDIA RTX 5080 ×2 | GPUs | ⚠️ Confirm Nemotron requirement |
+| NVIDIA RTX 5080 ×2 | GPUs | ⚠️ Confirm Nemotron req |
 
-**Required to qualify:** Demo video + social media post.
+**Required:** Demo video + social media post. See `docs/EVALUATION.md` for full matrix and bonus quests.
 
 ---
 
-## Environment & Dependencies
+## Environment
 
-Use `uv` to create an isolated venv — prevents interference with Hermes Agent's Python environment.
+Use `uv` for isolated venvs — prevents Hermes Agent interference. Install via pyproject.toml groups:
 
 ```bash
-# pyproject.toml defines all dependency groups:
-uv pip install -e "."          # core only
+uv pip install -e "."          # core only (pillow, daltonlens, numpy)
 uv pip install -e ".[dev]"     # + playwright, pytest
-uv pip install -e ".[space]"   # + gradio, spaces, torch
+uv pip install -e ".[space]"   # + gradio, spaces, torch (for HF Space)
 uv pip install -e ".[all]"     # everything
 ```
 
-Key constraint: `huggingface_hub<0.26` required (Gradio 5.x depends on HfFolder, removed in 0.26).
-
----
-
-## ⚠️ Pending
-
-- [ ] **Add HF_TOKEN to Space secrets** — Space is live but VLM won't work without it
-- [ ] **Demo video + social post** — required to qualify for hackathon
-- [ ] **Confirm NVIDIA Nemotron requirement** — asking organizers
-- [ ] **Transfer Space to hackathon org** — must move to `build-small-hackathon/color-ux-access`
-<!-- dummy commit to trigger Space rebuild with fixed requirements_space.txt -->
+**Constraint:** `huggingface_hub<0.26` required (Gradio 5 depends on HfFolder).
