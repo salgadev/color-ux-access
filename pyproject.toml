@@ -5,7 +5,7 @@ description = "CVD accessibility audit: screenshot → 10-type colorblind simula
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
-authors = [{name = "NARWALL", email = "contact@narwall.tech"}]
+authors = [{name = "NARWALL", email = "team@narwall.tech"}]
 homepage = "https://github.com/salgadev/color-ux-access"
 repository = "https://github.com/salgadev/color-ux-access"
 keywords = ["accessibility", "colorblind", "wcag", "gradio", "vlm"]
@@ -20,29 +20,26 @@ classifiers = [
 
 dependencies = [
     "pillow>=10.0",
-    "daltonlens>=0.1.0",
     "numpy>=1.26",
+    "gradio>=6.17.3",
+    "daltonlens>=0.1.5",
+    "requests>=2.34.2",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "playwright>=1.40",
-    "pytest-playwright>=0.5.0",
     "pytest>=8.0",
     "colorspacious>=1.1.2",
 ]
 space = [
-    "gradio>=5.0",
     "spaces>=0.8",
     'torch>=2.8.0',
     "openai>=1.0",
     "python-dotenv>=1.0",
-    "numpy>=1.26",
 ]
 modal = [
     "modal>=0.70",
     "fastapi[standard]>=0.120",
-    "gradio>=5.0",
     "python-multipart>=0.0.20",
     "openai>=1.0",
 ]
@@ -57,6 +54,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.sdist]
 include = [
     "color_ux_access",
+    "app",
     "vlm",
     "tests",
     "docs",
@@ -64,8 +62,8 @@ include = [
     "pytest.ini",
     "conftest.py",
     "requirements.txt",
-    "app.py",
-    "AGENTS.md",
+    "requirements_space.txt",
+    "app_space.py",
 ]
 
 [tool.pytest.ini_options]
@@ -77,6 +75,10 @@ addopts = "-v --tb=short"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+
+[tool.pytest-playwright]
+browser = "chromium"
+headless = true
 
 [tool.ruff]
 line-length = 100

@@ -1,7 +1,7 @@
 # Architecture — Color-UX-Access
 
 > How the system works: screenshot → CVD simulation → VLM → WCAG report.
-> Replaces `docs/AGENTS.md`. For deployment specifics, see `docs/DEPLOYMENT.md`.
+> For deployment specifics, see `docs/DEPLOYMENT.md`. For test patterns, see `docs/TESTING.md`.
 
 ---
 
@@ -11,7 +11,7 @@
 
 **Serves:** A person with CVD (8% of men, 0.5% of women) who encounters sites daily using color alone to convey meaning — error states, required fields, status indicators.
 
-**Philosophy:** The app is a proxy for the user's own eyes. It captures the visual experience the way a colorblind user would encounter it — not how the DOM is structured. This mirrors how NARWALL uses NVDA as a proxy for keyboard/screen reader users, but for color vision.
+**Philosophy:** The app is a proxy for the user's own eyes. It captures the visual experience the way a colorblind user would encounter it — not how the DOM is structured.
 
 ---
 
@@ -20,7 +20,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         USER FLOW                                │
-│  OS Screenshot tool ──► Upload PNG ──► CVD Gallery + WCAG Report │
+│  Upload PNG ──► CVD Gallery (10 types) ──► WCAG Report          │
 └─────────────────────────────────────────────────────────────────┘
 
 Screenshot (file upload)
@@ -28,11 +28,11 @@ Screenshot (file upload)
        ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │  Stage 1: CVD Simulation  (CPU — instant, no GPU needed)         │
-│  10 variants via app_space.py's deficiency_config (8 DaltonLens + 2 grayscale) │
-│  → Gallery: original + protanopia, deuteranopia, tritanopia,                   │
-│            protanomaly, deuteranomaly, tritanomaly,                            │
-│            severe_protanopia, severe_deuteranopia,                             │
-│            achromatopsia, achromatomaly                                        │
+│  10 variants via deficiency_config (8 DaltonLens + 2 grayscale)  │
+│  → Gallery: original + protanopia, deuteranopia, tritanopia,     │
+│            protanomaly, deuteranomaly, tritanomaly,              │
+│            severe_protanopia, severe_deuteranopia,               │
+│            achromatopsia, achromatomaly                          │
 └──────────────────────────────────────────────────────────────────┘
        │
        ▼
@@ -76,7 +76,7 @@ Screenshot (file upload)
 ```
 color_ux_access/
 ├── __init__.py         from .cvd_sim import simulate_cvd, CVD_VARIANTS
-├── cvd_sim.py          DaltonLens wrapper, 7 types + grayscale
+├── cvd_sim.py          DaltonLens wrapper, 10 types + grayscale
 │                       Public API: simulate_cvd(image, cvd_type) -> PIL Image
 └── capture.py          Playwright page → full-page screenshot
                         Public API: take_screenshot(page, url, timeout=60000) -> PIL Image
@@ -102,6 +102,15 @@ app/
 ├── app.py              gr.Blocks — URL input → Playwright screenshot → CVD → VLM
 └── custom_theme.py     ColorUXAccessTheme (accessible blue/gray, Inter font)
 ```
+
+### VLM backends (`MODELS` dict in `app.py`)
+
+| Key | Model | Params | Prize |
+|-----|-------|--------|-------|
+| `aya-vision-32b` | CohereLabs/aya-vision-32b | 32B | Default, Cohere |
+| `minicpm-v-4.6` | openbmb/mini-cpm-v-4_6 | ~4B | OpenBMB ($5K swap) |
+| `nemotron-15b` | nvidia/Nemotron-4-15B-base | ~15B | NVIDIA (unconfirmed) |
+| `qwen2-vl-7b-gguf` | Qwen2-VL-7B-Instruct GGUF | ~7B | llama.cpp offline |
 
 ---
 
@@ -148,13 +157,11 @@ _DEFFICIENCY_MAP = {
     'deuteranopia': simulate.Deficiency.DEUTAN,
     'protanopia': simulate.Deficiency.PROTAN,
     'tritanopia': simulate.Deficiency.TRITAN,
-    # ...
 }
 
 _SEVERITY_MAP = {
     'deuteranopia': 1.0,    # dichromacy — full deficiency
     'deuteranomaly': 0.6,   # anomalous trichromacy — partial
-    # ...
 }
 
 def simulate_cvd(image, cvd_type='deuteranopia') -> Image.Image:
@@ -204,28 +211,5 @@ Test: `pytest tests/test_app_space.py::test_blocks_theme_not_in_constructor -v`
 
 ---
 
-## Testing Philosophy
-
-Tests use a layered approach:
-
-| Category | Marker | What it tests | Duration |
-|----------|--------|---------------|----------|
-| Smoke | `smoke` | Import, module load, CVD config, Gradio apps loadable | <10s |
-| Pipeline | `pipeline` | Full image→CVD→WCAG report with mocked VLM | <30s |
-| Slow | `slow` | Real VLM calls, needs HF_TOKEN | 60-90s |
-
-**Source inspection tests** verify structural properties that mocks miss — e.g., `isinstance(file_obj, bytes)` check for GradioFile binary type, Modal app GPU config, Gradio 6 theme placement in `launch()` not `Blocks()`.
-
----
-
-## Reuse from NARWALL
-
-|| NARWALL artifact | What it contributes |
-|-----------------|---------------------|
-| `narwall-selenium/AGENTS.md` | "test from perspective of assistive tech users" philosophy |
-| `narwall-selenium/docs/technology-readiness/REGRESSION_GUARDS.md` | WCAG mapping approach |
-| `skills/gradio-huggingface-space/SKILL.md` | Gradio 6.x deployment patterns |
-
----
-
-*See also: `docs/DEPLOYMENT.md` for HF Space and Modal specifics.*
+*See also: `docs/DEPLOYMENT.md` for HF Space and Modal specifics,
+`docs/EVALUATION.md` for sponsor prize matrix and model-swap details.*

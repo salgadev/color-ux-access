@@ -1,0 +1,227 @@
+# pr_compliance_checklist.yaml – Build Small Hackathon Review Rules
+# Place this file at your repository root.
+# See: https://huggingface.co/build-small-hackathon
+
+pr_compliances:
+  # ──────────────────────────────────────────────
+  # HARD CONSTRAINTS (will block merge on failure)
+  # ──────────────────────────────────────────────
+
+  - title: "Model Size ≤ 32B Parameters"
+    compliance_label: true
+    objective: "Total parameters across all models used must be ≤ 32 billion"
+    success_criteria: |
+      Sum of parameters from all referenced models (config.json,
+      model card metadata, or explicit check) is ≤ 32,000,000,000.
+    failure_criteria: |
+      Any model file or configuration exceeds 32B total parameters,
+      or the sum across all used models exceeds 32B.
+    severity: critical
+    auto_block: true
+    automation:
+      - type: python_script
+        path: .qodo/checks/check_model_size.py
+        args: ["--max_params", "32000000000"]
+
+  - title: "Gradio App Required"
+    compliance_label: true
+    objective: "The Space must be a Gradio app (not Streamlit, FastAPI, etc.)"
+    success_criteria: |
+      app.py imports gradio, and requirements.txt includes gradio.
+      Space SDK metadata in README.yaml is set to sdk: gradio.
+    failure_criteria: |
+      No gradio import found; sdk is not gradio; or gradio is missing from dependencies.
+    severity: critical
+    auto_block: true
+    automation:
+      - type: file_check
+        patterns:
+          - "app.py:.*import gradio"
+          - "requirements.txt:^gradio"
+          - "README.md:sdk: gradio"
+
+  - title: "Hosted Under build-small-hackathon Organization"
+    compliance_label: true
+    objective: "Space must be deployed under the build-small-hackathon Hugging Face org"
+    success_criteria: |
+      Repository metadata or Space configuration shows owner as
+      'build-small-hackathon'.
+    failure_criteria: |
+      Space is under a personal account or different organization.
+    severity: critical
+    auto_block: true
+    automation:
+      - type: env_check
+        env_var: "HF_SPACE_OWNER"
+        expected_value: "build-small-hackathon"
+
+  - title: "No Secrets or Hardcoded Credentials"
+    compliance_label: true
+    objective: "API keys, tokens, and passwords must not be hardcoded"
+    success_criteria: |
+      No matches for patterns like api_key=, token=, password=,
+      or similar credentials in source code.
+    failure_criteria: |
+      Any hardcoded secret detected in .py, .env, .yaml, or .json files.
+    severity: critical
+    auto_block: true
+    automation:
+      - type: secret_scan
+        patterns:
+          - "api_key\\s*="
+          - "token\\s*="
+          - "password\\s*="
+          - "secret\\s*="
+
+  # ──────────────────────────────────────────────
+  # CONDITIONAL BADGE REQUIREMENTS (only enforced if badge is claimed)
+  # ──────────────────────────────────────────────
+
+  - title: "[Off the Grid] No Cloud API Calls"
+    compliance_label: false
+    objective: "If claiming 'Off the Grid' badge, app must make no cloud API calls"
+    success_criteria: |
+      Static analysis shows no imports of requests, urllib, openai,
+      anthropic, google.generativeai, or similar HTTP/API libraries.
+    failure_criteria: |
+      Any HTTP client or API SDK import found in app.py or dependencies.
+    severity: high
+    auto_block: false
+    condition: "badge_off_the_grid == true"
+    automation:
+      - type: static_analysis
+        blocklist:
+          - "import requests"
+          - "from requests"
+          - "import urllib"
+          - "import openai"
+          - "from openai"
+          - "import anthropic"
+
+  - title: "[Well-Tuned] Fine-Tuned Model Published"
+    compliance_label: false
+    objective: "If claiming 'Well-Tuned' badge, a fine-tuned model must be on the Hub"
+    success_criteria: |
+      A model card references an adapter or full fine-tune uploaded to
+      Hugging Face Hub under the build-small-hackathon org.
+    failure_criteria: |
+      No fine-tuned model found; model is a raw base model without adapters.
+    severity: high
+    auto_block: false
+    condition: "badge_well_tuned == true"
+    automation:
+      - type: hf_api_check
+        endpoint: "https://huggingface.co/api/models"
+        params:
+          search: "build-small-hackathon"
+          sort: "modified"
+
+  - title: "[Off-Brand] Custom Frontend via gr.Server"
+    compliance_label: false
+    objective: "If claiming 'Off-Brand' badge, app must use gr.Server for custom UI"
+    success_criteria: |
+      app.py contains `gr.Server` usage with custom HTML/JS/CSS
+      beyond the default Gradio theme.
+    failure_criteria: |
+      No gr.Server found; app uses default Gradio interface only.
+    severity: high
+    auto_block: false
+    condition: "badge_off_brand == true"
+    automation:
+      - type: file_check
+        patterns:
+          - "app.py:gr\\.Server"
+
+  - title: "[Llama Champion] Runs via llama.cpp"
+    compliance_label: false
+    objective: "If claiming 'Llama Champion' badge, model must run via llama.cpp"
+    success_criteria: |
+      requirements.txt includes llama-cpp-python or llama.cpp,
+      or app.py imports from llama_cpp.
+    failure_criteria: |
+      No llama.cpp dependency or import found.
+    severity: high
+    auto_block: false
+    condition: "badge_llama_champion == true"
+    automation:
+      - type: file_check
+        patterns:
+          - "requirements.txt:llama-cpp"
+          - "app.py:llama_cpp"
+
+  - title: "[Sharing is Caring] Agent Trace Published"
+    compliance_label: false
+    objective: "If claiming 'Sharing is Caring' badge, agent trace dataset must be published"
+    success_criteria: |
+      A dataset with agent interaction traces is published on the Hub
+      under the build-small-hackathon org.
+    failure_criteria: |
+      No agent trace dataset found.
+    severity: high
+    auto_block: false
+    condition: "badge_sharing_is_caring == true"
+    automation:
+      - type: hf_api_check
+        endpoint: "https://huggingface.co/api/datasets"
+        params:
+          search: "build-small-hackathon"
+          sort: "modified"
+
+  - title: "[Field Notes] Blog Post Published"
+    compliance_label: false
+    objective: "If claiming 'Field Notes' badge, a blog post or report must be linked"
+    success_criteria: |
+      Repository README.md or a metadata file contains a URL to a blog post
+      or written report about the project.
+    failure_criteria: |
+      No blog post link found in project documentation.
+    severity: high
+    auto_block: false
+    condition: "badge_field_notes == true"
+    automation:
+      - type: file_check
+        patterns:
+          - "README.md:https?://.*blog.*|https?://.*medium.*|https?://.*report.*"
+
+  # ──────────────────────────────────────────────
+  # ADVISORY CHECKS (will warn but not block)
+  # ──────────────────────────────────────────────
+
+  - title: "Open Source License Declared"
+    compliance_label: true
+    objective: "Project must have a declared open source license"
+    success_criteria: |
+      A LICENSE file exists, or model card/license field is set in README.yaml.
+    failure_criteria: |
+      No license file or declaration found.
+    severity: low
+    auto_block: false
+
+  - title: "Submission Completeness"
+    compliance_label: true
+    objective: "Demo video and social post links must be present"
+    success_criteria: |
+      README.md or metadata includes links to demo video (YouTube/Loom)
+      and social media post (Twitter/LinkedIn).
+    failure_criteria: |
+      Missing demo video link or social post link.
+    severity: medium
+    auto_block: false
+    automation:
+      - type: file_check
+        patterns:
+          - "README.md:https?://.*youtube\\\\.com|https?://.*loom\\\\.com"
+          - "README.md:https?://.*twitter\\\\.com|https?://.*linkedin\\\\.com"
+  - title: "AGENTS.md Present"
+    compliance_label: true
+    objective: "Ensure AGENTS.md exists in repository root to document agent behavior and constraints"
+    success_criteria: |
+      File AGENTS.md exists at the repository root.
+    failure_criteria: |
+      AGENTS.md missing from repository root.
+    severity: high
+    auto_block: true
+    automation:
+      - type: file_check
+        patterns:
+          - "AGENTS.md:.*"
