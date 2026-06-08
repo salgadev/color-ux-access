@@ -24,6 +24,7 @@ dependencies = [
     "gradio>=6.17.3",
     "daltonlens>=0.1.5",
     "requests>=2.34.2",
+    "modal>=1.4.3",
 ]
 
 [project.optional-dependencies]

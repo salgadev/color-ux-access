@@ -9,10 +9,9 @@ Usage:
 
   # Local development (file upload OR URL capture):
   python app.py                      # file upload mode
-  python app.py --url                # URL capture mode (Playwright)
 
 Architecture:
-  Screenshot (file upload or URL)
+  Screenshot (file upload)
          │
          ▼
   Stage 1: CVD Simulation (CPU) → 10 variants
@@ -55,6 +54,8 @@ from PIL import Image
 import numpy as np
 from daltonlens import simulate
 import requests
+import base64
+from openai import OpenAI
 
 # ── CVD Simulators ────────────────────────────────────────────────────────────
 
@@ -201,6 +202,10 @@ def _capture_url(url: str) -> bytes:
 
 _MODAL_URL = os.environ.get('MODAL_URL', 'https://narwall-tech--color-ux-access-ui.modal.run')
 
+# Modal Inference Provider configuration
+_MODAL_INFERENCE_BASE_URL = os.environ.get('MODAL_INFERENCE_BASE_URL', 'https://inference.modal.com/v1')
+_MODAL_INFERENCE_API_KEY = os.environ.get('MODAL_INFERENCE_API_KEY')  # from modal secret modal-inference-key
+
 
 def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
     """
@@ -266,25 +271,72 @@ def _call_modal_analyze(image_bytes: bytes, timeout: int = 120) -> dict:
         return result
 
 
-# ── VLM Inference (via Modal) ──────────────────────────────────────────────────
-
+# ── VLM Inference (via Modal Inference Provider) ──────────────────────────────────────
 def analyze_with_vlm(image_bytes: bytes, model: str = "aya-vision-32b") -> dict:
     """
-    Analyze a screenshot for WCAG color-accessibility issues via Modal endpoint.
-
-    Args:
-        image_bytes: PNG/JPEG bytes of the screenshot.
-        model: Model backend key from MODELS dict. Only aya-vision-32b is deployed.
-
-    Returns:
-        WCAG JSON dict with keys: findings (list), passes (bool), summary (str).
-        On error, returns {'error': str, 'findings': [], 'passes': False}.
+    Analyze a screenshot for WCAG color-accessibility issues via Modal Inference Provider.
     """
     try:
-        return _call_modal_analyze(image_bytes)
+        # Prepare OpenAI client pointing to Modal inference endpoint
+        client = OpenAI(
+            base_url=_MODAL_INFERENCE_BASE_URL,
+            api_key=_MODAL_INFERENCE_API_KEY,
+        )
+        
+        # Encode image to base64
+        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # System prompt from modal_app.py (adjusted)
+        system_prompt = (
+            "You are an accessibility expert specializing in colorblind user experience. "
+            "Analyze screenshots for WCAG 2.1 compliance issues. "
+            "For each finding, cite the specific success criterion (1.1.1, 1.4.1, 1.4.3, or 1.4.11). "
+            "Output a JSON object with this structure:\n"
+            "{\n"
+            "  \"findings\": [\n"
+            "    {\n"
+            "      \"type\": \"Low Contrast | Color Only Information | Missing Text Alternative | Insufficient Non-Text Contrast\",\n"
+            "      \"wcag_criterion\": \"1.4.1 | 1.4.3 | 1.1.1 | 1.4.11\",\n"
+            "      \"description\": \"...\",\n"
+            "      \"severity\": \"critical | serious | moderate\",\n"
+            "      \"location\": \"Top-left, center, etc.\",\n"
+            "    }\n"
+            "  ],\n"
+            "  \"summary\": \"Overall assessment\",\n"
+            "  \"passes\": true/false\n"
+            "}\n"
+        )
+        
+        # Determine actual model ID from MODELS dict
+        model_info = MODELS.get(model, {})
+        model_id = model_info.get("model_id", model)  # fallback to model key
+        
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": system_prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=1024,
+            temperature=0.1,
+        )
+        
+        content = response.choices[0].message.content
+        if content.startswith("```"):
+            # Strip code fences if present
+            lines = content.split("\n")
+            content = "\n".join(lines[1:-1])
+        return json.loads(content)
     except Exception as e:
-        return {'error': str(e), 'findings': [], 'passes': False}
-
+        return {"error": str(e), "findings": [], "passes": False}
 
 # ── URL Mode Flag ──────────────────────────────────────────────────────────────
 # Set --url on the command line to enable URL capture input.
