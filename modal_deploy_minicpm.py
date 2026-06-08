@@ -29,7 +29,7 @@ class MiniCPMVLLM:
 
         hf_token = os.getenv("HF_TOKEN")
         if hf_token:
-            print(f"HF_TOKEN is set (starts with: {hf_token[:5]})")
+            print("HF_TOKEN is set")
         else:
             print("HF_TOKEN is NOT set")
 
