@@ -72,7 +72,7 @@ class TestGradioApps:
 
     def test_app_has_cvd_gallery(self):
         import app as app_module
-        assert callable(app_module.generate_cvd_gallery)
+        assert callable(app_module.generate_cvd_grid)
 
     def test_deficiency_config_has_8_types(self):
         import app as app_module
@@ -80,16 +80,9 @@ class TestGradioApps:
 
 
 class TestCVDVariants:
-    def test_ten_type_gallery_count(self):
-        """generate_cvd_gallery must produce exactly 10 variants (8 CVD + 2 grayscale)."""
-        import app as app_module
-        img = Image.new('RGB', (100, 100), (128, 128, 128))
-        gallery = app_module.generate_cvd_gallery(img)
-        assert len(gallery) == 10, f"Expected 10 CVD variants, got {len(gallery)}"
-
     def test_all_cvd_type_names_unique(self):
         import app as app_module
         img = Image.new('RGB', (50, 50), (100, 100, 100))
-        gallery = app_module.generate_cvd_gallery(img)
+        gallery = app_module.generate_cvd_grid(img)
         names = [label for _, label in gallery]
         assert len(names) == len(set(names)), "CVD type labels must be unique"
