@@ -31,23 +31,31 @@ def img_factory(width=100, height=100, color=(128, 128, 128)):
 
 # ── CVD Gallery Tests ─────────────────────────────────────────────────────────
 
-class TestCVDGallery:
-    def test_gallery_returns_ten_items(self):
+class TestCVDGrid:
+    def test_grid_returns_four_items(self):
         img = img_factory(200, 200)
-        gallery = app_module.generate_cvd_gallery(img)
-        assert len(gallery) == 10, f"Expected 10 CVD variants, got {len(gallery)}"
+        gallery = app_module.generate_cvd_grid(img)
+        assert len(gallery) == 4, f"Expected 4 CVD variants, got {len(gallery)}"
 
-    def test_gallery_items_are_pil_images(self):
+    def test_grid_items_are_pil_images(self):
         img = img_factory(200, 200)
-        gallery = app_module.generate_cvd_gallery(img)
+        gallery = app_module.generate_cvd_grid(img)
         for item, label in gallery:
             assert isinstance(item, Image.Image), f"Expected PIL Image, got {type(item)}"
 
-    def test_gallery_labels_not_empty(self):
+    def test_grid_labels_not_empty(self):
         img = img_factory(200, 200)
-        gallery = app_module.generate_cvd_gallery(img)
+        gallery = app_module.generate_cvd_grid(img)
         for _, label in gallery:
             assert label, "Gallery label must not be empty"
+
+    def test_grid_has_correct_labels(self):
+        img = img_factory(100, 100)
+        gallery = app_module.generate_cvd_grid(img)
+        expected = ["Normal vision (original design)", "Protanopia (red-blind)",
+                    "Deuteranopia (green-blind)", "Tritanopia (blue-blind)"]
+        for (_, label), expected_label in zip(gallery, expected):
+            assert label == expected_label, f"Expected '{expected_label}', got '{label}'"
 
     def test_achromatopsia_is_grayscale(self):
         img = img_factory(100, 100, (200, 50, 50))  # red image
@@ -85,7 +93,7 @@ class TestWCAGReport:
     def test_report_error_handling(self):
         result = {"error": "Model timeout after 60s"}
         report = app_module.format_wcag_report(result)
-        assert "Error" in report or "⚠" in report
+        assert "Error" in report or "Warning" in report
 
     def test_report_no_findings_without_pass_flag(self):
         result = {"findings": [], "summary": "No issues detected"}
@@ -93,27 +101,17 @@ class TestWCAGReport:
         assert "No accessibility issues" in report
 
 
-# ── MODELS Dict Tests ─────────────────────────────────────────────────────────
+# ── SUPPORTED_MODEL Tests ─────────────────────────────────────────────────────
 
-class TestMODELS:
-    def test_models_dict_exists(self):
-        assert hasattr(app_module, 'MODELS')
+class TestSupportedModel:
+    def test_supported_model_exists(self):
+        assert hasattr(app_module, 'SUPPORTED_MODEL')
 
-    def test_aya_vision_model_present(self):
-        assert "aya-vision-32b" in app_module.MODELS
-        entry = app_module.MODELS["aya-vision-32b"]
-        assert "model_id" in entry
-        assert entry["model_id"] == "CohereLabs/aya-vision-32b"
+    def test_supported_model_is_minicpm(self):
+        assert app_module.SUPPORTED_MODEL == "minicpm-v-4.6"
 
-    def test_minicpm_model_present(self):
-        assert "minicpm-v-4.6" in app_module.MODELS
-        entry = app_module.MODELS["minicpm-v-4.6"]
-        assert "model_id" in entry
-
-    def test_all_models_have_required_keys(self):
-        for name, entry in app_module.MODELS.items():
-            assert "model_id" in entry, f"{name} missing model_id"
-            assert "provider" in entry, f"{name} missing provider"
+    def test_supported_model_is_string(self):
+        assert isinstance(app_module.SUPPORTED_MODEL, str)
 
 
 # ── Gradio 5/6 Compat Tests ───────────────────────────────────────────────────
