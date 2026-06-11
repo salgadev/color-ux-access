@@ -42,6 +42,8 @@ from daltonlens import simulate
 import requests
 import base64
 
+from custom_theme import color_ux_access_theme
+
 # -- Load .env if available ---------------------------------------------------
 try:
     from dotenv import load_dotenv
@@ -92,6 +94,9 @@ def image_to_bytes(img: Image.Image, fmt: str = 'PNG') -> bytes:
     img.save(buf, format=fmt)
     return buf.getvalue()
 
+def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]:
+    """Alias for generate_cvd_grid."""
+    return generate_cvd_grid(original)
 
 def generate_cvd_grid(original: Image.Image) -> list[tuple[Image.Image, str]]:
     """Generate the 2x2 CVD comparison grid.
@@ -382,11 +387,7 @@ if __name__ == '__main__':
         demo.launch(
             server_name='0.0.0.0',
             server_port=7860,
-            theme=gr.themes.Base(
-                primary_hue='blue',
-                secondary_hue='gray',
-                neutral_hue='gray',
-            ),
+            theme=color_ux_access_theme,
             css=_theme_css,
         )
     else:
