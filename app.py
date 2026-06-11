@@ -95,8 +95,36 @@ def image_to_bytes(img: Image.Image, fmt: str = 'PNG') -> bytes:
     return buf.getvalue()
 
 def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]:
-    """Alias for generate_cvd_grid."""
-    return generate_cvd_grid(original)
+    """Generate all 8 CVD variant images from deficiency_config.
+
+    Produces one image per CVD type in deficiency_config.
+    """
+    gallery = []
+    for cvd_name, cfg in deficiency_config.items():
+        sim = cfg['simulator']
+        deficiency = cfg['deficiency']
+        severity = cfg['severity']
+        simulated = simulate_cvd(original, sim, deficiency, severity)
+        # Format label: "Protanopia (red-blind)", "Deuteranomaly (green-weak)", etc.
+        label = _cvd_name_to_label(cvd_name)
+        gallery.append((simulated, label))
+    return gallery
+
+
+def _cvd_name_to_label(cvd_name: str) -> str:
+    """Map deficiency_config key to human-readable label."""
+    labels = {
+        'protanopia': 'Protanopia (red-blind)',
+        'severe_protanopia': 'Severe Protanopia (red-blind)',
+        'deuteranopia': 'Deuteranopia (green-blind)',
+        'severe_deuteranopia': 'Severe Deuteranopia (green-blind)',
+        'tritanopia': 'Tritanopia (blue-blind)',
+        'protanomaly': 'Protanomaly (red-weak)',
+        'deuteranomaly': 'Deuteranomaly (green-weak)',
+        'tritanomaly': 'Tritanomaly (blue-weak)',
+    }
+    return labels.get(cvd_name, cvd_name)
+
 
 def generate_cvd_grid(original: Image.Image) -> list[tuple[Image.Image, str]]:
     """Generate the 2x2 CVD comparison grid.
@@ -180,12 +208,53 @@ _VLM_CVD_PROMPTS = {
         "and contrast problems specific to your condition."
     ),
     "Tritanopia (blue-blind)": (
-        "You have tritanopia (blue-blind CVD). Analyze this page as it appears to you. "
-        "Focus on WCAG 2.1 compliance issues that affect a tritanope: "
-        "blue-yellow color confusion, information conveyed solely by blue, "
-        "and contrast problems specific to your condition."
-    ),
-}
+            "You have tritanopia (blue-blind CVD). Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect a tritanope: "
+            "blue-yellow color confusion, information conveyed solely by blue, "
+            "and contrast problems specific to your condition."
+        ),
+        "Severe Protanopia (red-blind)": (
+            "You have severe protanopia (complete red-blindness, severity 1.0). "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues for a protanope with no functional red cones: "
+            "red-green color confusion, information conveyed solely by red, "
+            "and contrast problems specific to your condition."
+        ),
+        "Severe Deuteranopia (green-blind)": (
+            "You have severe deuteranopia (complete green-blindness, severity 1.0). "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues for a deuteranope with no functional green cones: "
+            "green-red color confusion, information conveyed solely by green, "
+            "and contrast problems specific to your condition."
+        ),
+        "Protanomaly (red-weak)": (
+            "You have protanomaly (red-weak CVD, partial protanopia). "
+            "Colors appear less bright and red/orange hues are shifted. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced red sensitivity: "
+            "red-green color confusion (milder than protanopia), "
+            "information conveyed solely by red, "
+            "and contrast problems specific to your condition."
+        ),
+        "Deuteranomaly (green-weak)": (
+            "You have deuteranomaly (green-weak CVD, the most common form of colorblindness). "
+            "Colors appear less bright and green/yellow hues are shifted. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced green sensitivity: "
+            "green-red color confusion (milder than deuteranopia), "
+            "information conveyed solely by green, "
+            "and contrast problems specific to your condition."
+        ),
+        "Tritanomaly (blue-weak)": (
+            "You have tritanomaly (blue-weak CVD, partial tritanopia). "
+            "Colors appear shifted and blue/violet hues are less distinct. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced blue sensitivity: "
+            "blue-yellow color confusion (milder than tritanopia), "
+            "information conveyed solely by blue, "
+            "and contrast problems specific to your condition."
+        ),
+    }
 
 _ACCESSIBILITY_SYSTEM_PROMPT = (
     "Output a JSON object with this structure:\n"
@@ -303,6 +372,32 @@ def analyze_all_perspectives(cvd_grid: list) -> dict:
 _theme_css = """
 :root { --color-primary: #1E88E5; }
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
+/* Gallery: fixed 4:3 aspect ratio per thumbnail, centered crop */
+.gallery .grid-container .image-item,
+.gallery .grid-container [data-testid="gallery"] .image-container {
+    aspect-ratio: 4 / 3 !important;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.gallery img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover !important;
+    object-position: center center;
+}
+/* Caption labels: truncate long labels to 1 line */
+.thumbnail-item .caption-label {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    text-align: center;
+    display: block;
+}
 """
 
 _gradio_version = tuple(int(x) for x in gr.__version__.split('.')[:2])
@@ -341,45 +436,52 @@ with gr.Blocks(
         submit_btn = gr.Button('Analyze', variant='primary', scale=0)
 
     with gr.Row():
-        cvd_grid = gr.Gallery(
-            label='Color-Vision Comparison (2x2 grid)',
-            columns=2,
-            rows=2,
-            object_fit='contain',
-            height=600,
-        )
+            cvd_grid = gr.Gallery(
+                label='Color-Vision Simulation Gallery (8 CVD variants)',
+                columns=4,
+                object_fit='cover',
+                height=500,
+            )
+            report_output = gr.Markdown(label='Accessibility Report')
 
-    report_output = gr.Markdown(label='Accessibility Report')
+            # State to hold the current CVD grid for VLM analysis
+            current_cvd_grid = gr.State([])
 
-    def run_analysis(file_obj):
-        """File upload mode -- receives screenshot bytes, returns CVD grid + report."""
-        if file_obj is None:
-            return [], 'Please upload a screenshot first.'
+            def handle_file_upload(file_obj):
+                """On file upload: generate gallery images immediately (no VLM)."""
+                if file_obj is None:
+                    return [], gr.update()
+                image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
+                try:
+                    original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+                except Exception as e:
+                    return [], f'Could not open image: {e}'
+                gallery = generate_cvd_gallery(original)
+                return gallery, gallery  # Return gallery for display and state
 
-        image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
+            def run_vlm_analysis(cvd_grid_state):
+                """On Analyze click: run VLM on the pre-generated CVD grid."""
+                if not cvd_grid_state:
+                    return 'Please upload a screenshot first.'
+                try:
+                    vlm_result = analyze_all_perspectives(cvd_grid_state)
+                except Exception as e:
+                    vlm_result = {'error': str(e), 'findings': [], 'passes': False}
+                return format_wcag_report(vlm_result)
 
-        try:
-            original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        except Exception as e:
-            return [], f'Could not open image: {e}'
+            # File upload triggers gallery generation immediately
+            file_input.change(
+                fn=handle_file_upload,
+                inputs=file_input,
+                outputs=[cvd_grid, current_cvd_grid],
+            )
 
-        grid = generate_cvd_grid(original)
-
-        # Send ALL CVD perspectives to the VLM endpoint
-        # Each variant gets a role-specific prompt (Normal, Protanopia, Deuteranopia, Tritanopia)
-        try:
-            vlm_result = analyze_all_perspectives(grid)
-        except Exception as e:
-            vlm_result = {'error': str(e), 'findings': [], 'passes': False}
-
-        report_md = format_wcag_report(vlm_result)
-        return grid, report_md
-
-    submit_btn.click(
-        fn=run_analysis,
-        inputs=file_input,
-        outputs=[cvd_grid, report_output],
-    )
+            # Analyze button triggers VLM only
+            submit_btn.click(
+                fn=run_vlm_analysis,
+                inputs=current_cvd_grid,
+                outputs=report_output,
+            )
 
 
 if __name__ == '__main__':

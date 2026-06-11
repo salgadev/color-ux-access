@@ -158,5 +158,100 @@ class TestDeficiencyConfig:
             assert 'severity' in cfg, f"{name} missing severity"
 
     def test_severity_values_are_floats(self):
-        for name, cfg in app_module.deficiency_config.items():
-            assert isinstance(cfg['severity'], float), f"{name} severity not float"
+            for name, cfg in app_module.deficiency_config.items():
+                assert isinstance(cfg['severity'], float), f"{name} severity not float"
+
+
+    # ── Full 8-Type CVD Gallery Tests ─────────────────────────────────────────────
+
+    class TestFullCVDGallery:
+        """
+        Gallery must show all 8 CVD variants from deficiency_config, not just 4.
+        File upload triggers gallery generation; Analyze button triggers VLM only.
+        """
+
+        def test_generate_cvd_gallery_returns_8_items(self, img_factory):
+            """Gallery should produce one image per CVD type (8 total)."""
+            img = img_factory(200, 200)
+            gallery = app_module.generate_cvd_gallery(img)
+            assert len(gallery) == 8, f"Expected 8 CVD variants, got {len(gallery)}"
+
+        def test_gallery_has_8_unique_labels(self, img_factory):
+            """Each of the 8 CVD types should appear in the gallery."""
+            img = img_factory(200, 200)
+            gallery = app_module.generate_cvd_gallery(img)
+            labels = [label for _, label in gallery]
+            assert len(labels) == 8, f"Expected 8 labels, got {len(labels)}"
+            # All labels should be unique (no duplicates)
+            assert len(set(labels)) == 8, f"Labels not unique: {labels}"
+
+        def test_gallery_covers_all_deficiency_types(self, img_factory):
+                    """Gallery should include all 8 types from deficiency_config."""
+                    img = img_factory(200, 200)
+                    gallery = app_module.generate_cvd_gallery(img)
+                    gallery_labels = [label for _, label in gallery]
+                    expected_types = list(app_module.deficiency_config.keys())
+                    for expected in expected_types:
+                        # Split by underscore so 'severe_protanopia' → ['severe','protanopia']
+                        # then check all parts appear (case-insensitive) in the label
+                        parts = expected.lower().split('_')
+                        found = all(any(part in label.lower() for label in gallery_labels)
+                                    for part in parts)
+                        assert found, f"CVD type '{expected}' not found in gallery labels: {gallery_labels}"
+
+
+    # ── Event Handler Separation Tests ────────────────────────────────────────────
+
+    class TestEventHandlerSeparation:
+        """
+        File upload triggers gallery generation.
+        Analyze button only triggers VLM endpoint.
+        These should be separate event handlers.
+        """
+
+        def test_app_has_handle_file_upload_function(self):
+            """App must have a function to handle file upload events (for gallery generation)."""
+            assert hasattr(app_module, 'handle_file_upload'), \
+                "App must have handle_file_upload() function for file change event"
+
+        def test_app_has_run_vlm_analysis_function(self):
+            """App must have a function to handle Analyze button click (VLM only)."""
+            assert hasattr(app_module, 'run_vlm_analysis'), \
+                "App must have run_vlm_analysis() function for analyze button"
+
+        def test_handle_file_upload_does_not_call_vlm(self):
+            """File upload handler should generate gallery only, not call VLM."""
+            import inspect
+            assert hasattr(app_module, 'handle_file_upload'), "Missing handle_file_upload"
+            source = inspect.getsource(app_module.handle_file_upload)
+            # Should NOT call analyze_all_perspectives or _call_minicpm_endpoint
+            assert 'analyze_all_perspectives' not in source, \
+                "handle_file_upload should not call VLM (analyze_all_perspectives)"
+            assert '_call_minicpm_endpoint' not in source, \
+                "handle_file_upload should not call VLM directly"
+
+        def test_run_vlm_analysis_calls_vlm_endpoint(self):
+            """Analyze handler should call VLM endpoint."""
+            import inspect
+            assert hasattr(app_module, 'run_vlm_analysis'), "Missing run_vlm_analysis"
+            source = inspect.getsource(app_module.run_vlm_analysis)
+            assert 'analyze_all_perspectives' in source or '_call_minicpm_endpoint' in source, \
+                "run_vlm_analysis should call VLM endpoint"
+
+
+    # ── Gallery Layout Configuration Tests ────────────────────────────────────────
+
+    class TestGalleryLayout:
+        """
+        Gallery should display in a sensible grid layout (2x4) for 8 images.
+        """
+
+        def test_gallery_columns_and_rows_configured(self):
+            """Gradio Gallery should be configured with columns=4, rows=2 for 8 images."""
+            app_source = pathlib.Path(__file__).resolve().parent.parent / 'app.py'
+            source = app_source.read_text()
+            # Find Gallery component definition
+            assert 'gr.Gallery(' in source, "No gr.Gallery found in app.py"
+            # Should have columns=4 (showing 4 per row for 8 images = 2 rows)
+            assert 'columns=4' in source or 'columns = 4' in source, \
+                "Gallery should use columns=4 for 2x4 layout of 8 images"
