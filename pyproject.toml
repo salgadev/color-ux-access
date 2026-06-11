@@ -26,6 +26,9 @@ dependencies = [
     "requests>=2.34.2",
     "modal>=1.4.3",
     "openai>=1.0",
+    "pytest>=9.0.3",
+    "dotenv>=0.9.9",
+    "colorspacious>=1.1.2",
 ]
 
 [project.optional-dependencies]
