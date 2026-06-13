@@ -1,34 +1,9 @@
-"""
-Color-UX-Access — Gradio application
-=====================================
-Single-file Gradio app for colorblind accessibility testing.
-Only accepts user-uploaded screenshots (no URL capture / browser automation).
+"""Color-UX-Access: Gradio app for colorblind accessibility testing.
 
-Architecture:
-  Screenshot (file upload)
-         |
-         v
-  Stage 1: CVD Simulation (CPU) -> 3-type comparison grid
-         |
-         v
-  Stage 2: VLM Inference (GPU via Modal endpoint) -> WCAG 2.1 JSON
-         |
-         v
-  Stage 3: Report (Markdown)
-
-Requirements:
-  - Python 3.12
-  - gradio>=6.0, pillow, daltonlens, requests, python-dotenv
-
-Local setup:
-  uv sync --python 3.12
-  cp .env.example .env  # set MODAL_INFERENCE_URL
-
-HF Space deploy:
-  1. Push to GitHub
-  2. Create HF Space (SDK: Gradio, hardware: T4/mega or A10G)
-  3. Add MODAL_INFERENCE_URL secret in Space settings
-  4. Link to GitHub repo
+IMPORTANT:
+This file must NOT modify its own source code at runtime.
+Do not add any logic that reads/writes app.py and does text replacements.
+All UI changes must be implemented via Gradio components and event handlers.
 """
 
 import os
@@ -95,8 +70,36 @@ def image_to_bytes(img: Image.Image, fmt: str = 'PNG') -> bytes:
     return buf.getvalue()
 
 def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]:
-    """Alias for generate_cvd_grid."""
-    return generate_cvd_grid(original)
+    """Generate all 9 images: original + 8 CVD variant images from deficiency_config.
+    
+    First image is always the original (normal vision) for comparison.
+    """
+    gallery = [(original, "Normal vision (original design)")]
+    for cvd_name, cfg in deficiency_config.items():
+        sim = cfg['simulator']
+        deficiency = cfg['deficiency']
+        severity = cfg['severity']
+        simulated = simulate_cvd(original, sim, deficiency, severity)
+        # Format label: "Protanopia (red-blind)", "Deuteranomaly (green-weak)", etc.
+        label = _cvd_name_to_label(cvd_name)
+        gallery.append((simulated, label))
+    return gallery
+
+
+def _cvd_name_to_label(cvd_name: str) -> str:
+    """Map deficiency_config key to human-readable label."""
+    labels = {
+        'protanopia': 'Protanopia (red-blind)',
+        'severe_protanopia': 'Severe Protanopia (red-blind)',
+        'deuteranopia': 'Deuteranopia (green-blind)',
+        'severe_deuteranopia': 'Severe Deuteranopia (green-blind)',
+        'tritanopia': 'Tritanopia (blue-blind)',
+        'protanomaly': 'Protanomaly (red-weak)',
+        'deuteranomaly': 'Deuteranomaly (green-weak)',
+        'tritanomaly': 'Tritanomaly (blue-weak)',
+    }
+    return labels.get(cvd_name, cvd_name)
+
 
 def generate_cvd_grid(original: Image.Image) -> list[tuple[Image.Image, str]]:
     """Generate the 2x2 CVD comparison grid.
@@ -119,19 +122,22 @@ def generate_cvd_grid(original: Image.Image) -> list[tuple[Image.Image, str]]:
 
 
 def format_wcag_report(vlm_result: dict) -> str:
-    """Convert VLM JSON output into a formatted markdown report."""
     if 'error' in vlm_result:
-        return f"Warning: {vlm_result['error']}"
+        return f"**Error:** {vlm_result['error']}"
 
+    cvd_label = vlm_result.get('cvd_label', '')
+    if cvd_label:
+        report = f"## WCAG Report: {cvd_label}\n\n"
+    else:
+        report = "## WCAG Accessibility Report\n\n"
+    
     findings = vlm_result.get('findings', [])
     if not findings:
         if vlm_result.get('passes', False):
-            return "Pass -- No accessibility issues detected."
-        return "No accessibility issues detected."
+            return report + "Pass -- No accessibility issues detected."
+        return report + "No accessibility issues detected."
 
-    report = "## WCAG Accessibility Report\n\n"
     report += f"**Overall:** {'Pass' if vlm_result.get('passes', False) else 'Fail'}\n\n"
-
     severity_icons = {'critical': ':red_circle:', 'serious': ':orange_circle:', 'moderate': ':yellow_circle:'}
     wcag_links = {
         '1.1.1':  'https://www.w3.org/WAI/WCAG21/Understanding/non-text-content',
@@ -180,12 +186,53 @@ _VLM_CVD_PROMPTS = {
         "and contrast problems specific to your condition."
     ),
     "Tritanopia (blue-blind)": (
-        "You have tritanopia (blue-blind CVD). Analyze this page as it appears to you. "
-        "Focus on WCAG 2.1 compliance issues that affect a tritanope: "
-        "blue-yellow color confusion, information conveyed solely by blue, "
-        "and contrast problems specific to your condition."
-    ),
-}
+            "You have tritanopia (blue-blind CVD). Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect a tritanope: "
+            "blue-yellow color confusion, information conveyed solely by blue, "
+            "and contrast problems specific to your condition."
+        ),
+        "Severe Protanopia (red-blind)": (
+            "You have severe protanopia (complete red-blindness, severity 1.0). "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues for a protanope with no functional red cones: "
+            "red-green color confusion, information conveyed solely by red, "
+            "and contrast problems specific to your condition."
+        ),
+        "Severe Deuteranopia (green-blind)": (
+            "You have severe deuteranopia (complete green-blindness, severity 1.0). "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues for a deuteranope with no functional green cones: "
+            "green-red color confusion, information conveyed solely by green, "
+            "and contrast problems specific to your condition."
+        ),
+        "Protanomaly (red-weak)": (
+            "You have protanomaly (red-weak CVD, partial protanopia). "
+            "Colors appear less bright and red/orange hues are shifted. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced red sensitivity: "
+            "red-green color confusion (milder than protanopia), "
+            "information conveyed solely by red, "
+            "and contrast problems specific to your condition."
+        ),
+        "Deuteranomaly (green-weak)": (
+            "You have deuteranomaly (green-weak CVD, the most common form of colorblindness). "
+            "Colors appear less bright and green/yellow hues are shifted. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced green sensitivity: "
+            "green-red color confusion (milder than deuteranopia), "
+            "information conveyed solely by green, "
+            "and contrast problems specific to your condition."
+        ),
+        "Tritanomaly (blue-weak)": (
+            "You have tritanomaly (blue-weak CVD, partial tritanopia). "
+            "Colors appear shifted and blue/violet hues are less distinct. "
+            "Analyze this page as it appears to you. "
+            "Focus on WCAG 2.1 compliance issues that affect someone with reduced blue sensitivity: "
+            "blue-yellow color confusion (milder than tritanopia), "
+            "information conveyed solely by blue, "
+            "and contrast problems specific to your condition."
+        ),
+    }
 
 _ACCESSIBILITY_SYSTEM_PROMPT = (
     "Output a JSON object with this structure:\n"
@@ -298,11 +345,114 @@ def analyze_all_perspectives(cvd_grid: list) -> dict:
     return _merge_cvd_results(results)
 
 
+# -- VLM Caching ---------------------------------------------------------------
+
+_vlm_cache: dict[tuple[str, str], dict] = {}
+# Cache for merged VLM results, keyed by original image hash
+_vlm_merged_cache: dict[str, dict] = {}
+
+
+def _get_cache_key(img: Image.Image, label: str) -> tuple[str, str]:
+    img_bytes = image_to_bytes(img)
+    img_hash = hash(img_bytes)
+    return (str(img_hash), label)
+
+
+def _get_merged_cache_key(original_img: Image.Image) -> str:
+    """Generate cache key for merged VLM results from original image."""
+    img_bytes = image_to_bytes(original_img)
+    return str(hash(img_bytes))
+
+
+def analyze_single_perspective(img: Image.Image, label: str) -> dict:
+    cache_key = _get_cache_key(img, label)
+    if cache_key in _vlm_cache:
+        cached = _vlm_cache[cache_key].copy()
+        cached['cvd_label'] = label
+        return cached
+    
+    role_prompt = _VLM_CVD_PROMPTS.get(label, _VLM_CVD_PROMPTS["Normal vision (original design)"])
+    full_prompt = f"{role_prompt}\n\n{_ACCESSIBILITY_SYSTEM_PROMPT}"
+    img_bytes = image_to_bytes(img)
+    try:
+        result = _call_minicpm_endpoint(img_bytes, full_prompt)
+    except Exception as e:
+        result = {"error": str(e), "findings": [], "passes": False}
+    
+    result['cvd_label'] = label
+    _vlm_cache[cache_key] = result
+    return result
+
+
+def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
+    """
+    Run VLM analysis on each CVD perspective with per-perspective caching.
+    Also caches the merged result keyed by the original image.
+    """
+    if progress:
+        progress(0, desc="Preparing CVD simulation gallery...")
+    
+    # First image is always the original
+    original_img = cvd_grid[0][0]
+    merged_cache_key = _get_merged_cache_key(original_img)
+    
+    # Check merged cache first
+    if merged_cache_key in _vlm_merged_cache:
+        cached_merged = _vlm_merged_cache[merged_cache_key].copy()
+        if progress:
+            progress(1.0, desc="Loaded cached results")
+        return cached_merged
+    
+    # Not cached - run full analysis with per-perspective caching
+    results = {}
+    for i, (img, label) in enumerate(cvd_grid):
+        if progress:
+            progress(0.1 + (0.7 * i / len(cvd_grid)), desc=f"Analyzing {label} ({i+1}/{len(cvd_grid)})...")
+        # Use analyze_single_perspective which has its own cache
+        result = analyze_single_perspective(img, label)
+        results[label] = result
+    
+    merged = _merge_cvd_results(results)
+    _vlm_merged_cache[merged_cache_key] = merged
+    
+    if progress:
+        progress(0.9, desc="Formatting WCAG report...")
+        progress(1.0, desc="Analysis complete")
+    
+    return merged
+
+
 # -- Gradio App ---------------------------------------------------------------
 
 _theme_css = """
 :root { --color-primary: #1E88E5; }
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
+/* Gallery: fixed 4:3 aspect ratio per thumbnail, centered crop */
+.gallery .grid-container .image-item,
+.gallery .grid-container [data-testid="gallery"] .image-container {
+    aspect-ratio: 4 / 3 !important;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.gallery img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover !important;
+    object-position: center center;
+}
+/* Caption labels: truncate long labels to 1 line */
+.thumbnail-item .caption-label {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    text-align: center;
+    display: block;
+}
 """
 
 _gradio_version = tuple(int(x) for x in gr.__version__.split('.')[:2])
@@ -325,10 +475,10 @@ with gr.Blocks(
         '**Test any webpage for colorblind accessibility issues.**\n\n'
         '1. Capture your screen (OS/Browser screenshot tool)\n'
         '2. Upload the screenshot below\n'
-        '3. Get CVD simulations + WCAG 2.1 accessibility report\n\n'
-        'The VLM analyzes **all four CVD perspectives** (Normal, Protanopia, Deuteranopia, '
-        'Tritanopia) -- simulating a full panel of colorblind testers.\n\n'
-        'Note: First analysis takes ~60-90s (MiniCPM cold-start on Modal GPU).'
+        '3. Click any image in the gallery to see its WCAG accessibility report\n\n'
+        'The first image shows the original design. Clicking any image triggers VLM analysis '
+        '(first click takes ~60-90s, subsequent clicks are instant from cache).\n\n'
+        'Click each CVD variant to see how it appears to users with that type of colorblindness.'
     )
 
     with gr.Row():
@@ -338,48 +488,93 @@ with gr.Blocks(
             type='binary',
             height=80,
         )
-        submit_btn = gr.Button('Analyze', variant='primary', scale=0)
+        with gr.Column(scale=1):
+            submit_btn = gr.Button('Analyze', variant='primary')
+            status_output = gr.Markdown(
+                value='*Ready — upload a screenshot and click Analyze*',
+                visible=True,
+            )
 
     with gr.Row():
-        cvd_grid = gr.Gallery(
-            label='Color-Vision Comparison (2x2 grid)',
-            columns=2,
-            rows=2,
-            object_fit='contain',
-            height=600,
-        )
+            cvd_grid = gr.Gallery(
+                label='Color-Vision Simulation Gallery (9 variants: original + 8 CVD)',
+                columns=5,
+                object_fit='cover',
+                height=500,
+            )
+            report_output = gr.Markdown(
+                label='Accessibility Report',
+                value='*Upload a screenshot and click any image to see its WCAG report.*',
+            )
 
-    report_output = gr.Markdown(label='Accessibility Report')
+            # State to hold the current CVD grid for VLM analysis
+            current_cvd_grid = gr.State([])
 
-    def run_analysis(file_obj):
-        """File upload mode -- receives screenshot bytes, returns CVD grid + report."""
-        if file_obj is None:
-            return [], 'Please upload a screenshot first.'
+            def handle_file_upload(file_obj):
+                """On file upload: generate gallery images immediately (no VLM)."""
+                if file_obj is None:
+                    return [], gr.update()
+                image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
+                try:
+                    original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+                except Exception as e:
+                    return [], f'Could not open image: {e}'
+                gallery = generate_cvd_gallery(original)
+                return gallery, gallery
 
-        image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
+            def handle_gallery_select(evt, cvd_grid_state):
+                """On gallery image click: run VLM on just that single perspective (cached)."""
+                if not cvd_grid_state:
+                    return "*No images loaded.*", ""
+                
+                index = evt.index if hasattr(evt, 'index') else 0
+                if index >= len(cvd_grid_state):
+                    return "*Invalid selection.*", ""
+                
+                img, label = cvd_grid_state[index]
+                
+                try:
+                    vlm_result = analyze_single_perspective(img, label)
+                except Exception as e:
+                    vlm_result = {'error': str(e), 'findings': [], 'passes': False}
+                
+                return "", format_wcag_report(vlm_result)
 
-        try:
-            original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        except Exception as e:
-            return [], f'Could not open image: {e}'
+            def run_vlm_analysis(cvd_grid_state, progress=gr.Progress()):
+                """On Analyze click: run VLM on the pre-generated CVD grid with caching."""
+                if not cvd_grid_state:
+                    return 'Please upload a screenshot first.', '*No images loaded*'
 
-        grid = generate_cvd_grid(original)
+                try:
+                    vlm_result = analyze_all_perspectives_with_cache(cvd_grid_state, progress=progress)
+                except Exception as e:
+                    vlm_result = {'error': str(e), 'findings': [], 'passes': False}
 
-        # Send ALL CVD perspectives to the VLM endpoint
-        # Each variant gets a role-specific prompt (Normal, Protanopia, Deuteranopia, Tritanopia)
-        try:
-            vlm_result = analyze_all_perspectives(grid)
-        except Exception as e:
-            vlm_result = {'error': str(e), 'findings': [], 'passes': False}
+                report = format_wcag_report(vlm_result)
+                return report, "*Done — see report above*"
 
-        report_md = format_wcag_report(vlm_result)
-        return grid, report_md
+            # File upload triggers gallery generation immediately (no VLM)
+            file_input.change(
+                fn=handle_file_upload,
+                inputs=file_input,
+                outputs=[cvd_grid, current_cvd_grid],
+            )
 
-    submit_btn.click(
-        fn=run_analysis,
-        inputs=file_input,
-        outputs=[cvd_grid, report_output],
-    )
+            # Gallery click triggers VLM on single image (cached after first call)
+            cvd_grid.select(
+                fn=handle_gallery_select,
+                inputs=[current_cvd_grid],
+                outputs=[report_output, report_output],
+            )
+
+            # Analyze button triggers VLM on all perspectives with progress
+            # NOTE: This function and its click wiring are designed to keep
+            # Gradio's loading spinner and/or progress UI working.
+            submit_btn.click(
+                fn=run_vlm_analysis,
+                inputs=current_cvd_grid,
+                outputs=[report_output, status_output],
+            )
 
 
 if __name__ == '__main__':
