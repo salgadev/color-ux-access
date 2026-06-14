@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: gray
 sdk: gradio
 sdk_version: 6.0.0
-app_file: app_space.py
+app_file: app.py
 python_version: "3.12"
 hardware: t4-small
 dependencies: requirements_space.txt
