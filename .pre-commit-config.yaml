@@ -1,0 +1,12 @@
+repos:
+  - repo: local
+    hooks:
+      - id: block-root-fix-scripts
+        name: Block root-level fix/apply scripts
+        entry: python scripts/block_root_fix_scripts.py
+        language: python
+        types: [python]
+        stages: [commit]
+        verbose: true
+        additional_dependencies: []
+        args: []
