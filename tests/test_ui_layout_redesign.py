@@ -1,12 +1,12 @@
 """
-Tests for UI Layout Redesign — verify the original vs CVD comparison layout.
+Tests for UI Layout Redesign — verify the comparison grid layout with perspective cards.
 
 Requirements:
-1. Original screenshot image displayed above CVD gallery on left
-2. Original WCAG evaluation displayed above CVD WCAG evaluation on right
-3. Gallery/CVD selector changes only update CVD report, keep original report fixed
-4. VLM analysis includes original perspective as distinct entry
-5. Caching keys on original screenshot
+1. Original screenshot + 8 CVD variants displayed in comparison grid
+2. Each perspective card has: label, image display, WCAG results placeholder
+3. All perspectives render simultaneously on upload without user interaction
+4. Click Analyze runs WCAG evaluation for all perspectives
+5. No tabs — true side-by-side comparison grid
 """
 import sys
 import pathlib
@@ -18,11 +18,11 @@ if str(_project_root) not in sys.path:
 import gradio as gr
 import app as app_module
 from PIL import Image
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 class TestUILayoutRedesign:
-    """Tests for the redesigned UI layout with original vs CVD comparison."""
+    """Tests for the redesigned UI layout with comparison grid."""
 
     def test_generate_cvd_gallery_includes_original_as_first_entry(self):
         """generate_cvd_gallery should return original as first entry with correct label."""
@@ -45,33 +45,41 @@ class TestUILayoutRedesign:
 
     def test_analyze_all_perspectives_includes_original(self):
         """analyze_all_perspectives_with_cache should analyze original perspective."""
-        from app import analyze_all_perspectives_with_cache, _vlm_merged_cache
-        
+        from app import analyze_all_perspectives_with_cache, _vlm_merged_cache, _vlm_cache
+
         img = Image.new('RGB', (100, 50), color='red')
         cvd_grid = [
             (img, "Normal vision (original design)"),
             (img, "Protanopia (red-blind)"),
         ]
-        
+
         _vlm_merged_cache.clear()
-        
+        _vlm_cache.clear()
+
         with patch('app._call_minicpm_endpoint') as mock_vlm:
             mock_vlm.return_value = {"findings": [], "passes": True, "summary": "Test"}
-            
+
             result = analyze_all_perspectives_with_cache(cvd_grid)
-            
+
             # Should call VLM for each perspective including original
             assert mock_vlm.call_count == 2, f"Expected 2 VLM calls (original + 1 CVD), got {mock_vlm.call_count}"
 
-    def test_run_vlm_analysis_returns_original_report_to_original_output(self):
-        """run_vlm_analysis should return original perspective report to original_report_output."""
+    def test_run_vlm_analysis_returns_reports_for_all_cards(self):
+        """run_vlm_analysis should return WCAG reports for all 9 perspective cards."""
         from app import run_vlm_analysis, _vlm_merged_cache, _vlm_cache
+        import gradio as gr
         
         img = Image.new('RGB', (100, 50), color='yellow')  # Unique color to avoid cache conflicts
         cvd_grid = [
             (img, "Normal vision (original design)"),
             (img, "Protanopia (red-blind)"),
             (img, "Deuteranopia (green-blind)"),
+            (img, "Tritanopia (blue-blind)"),
+            (img, "Protanomaly (red-weak)"),
+            (img, "Deuteranomaly (green-weak)"),
+            (img, "Tritanomaly (blue-weak)"),
+            (img, "Severe Protanopia (red-blind)"),
+            (img, "Severe Deuteranopia (green-blind)"),
         ]
         
         _vlm_merged_cache.clear()
@@ -89,7 +97,7 @@ class TestUILayoutRedesign:
         
         with patch('app._call_minicpm_endpoint', side_effect=mock_vlm_side_effect):
             # run_vlm_analysis signature: (cvd_grid_state, progress)
-            # Returns: (original_report, status, cvd_report, original_vlm, cvd_results, comparison)
+            # Returns: [status, 9 card_reports, original_vlm, cvd_results, comparison]
             import gradio as gr
             progress = gr.Progress()
             progress.tqdm = lambda x: x
@@ -97,84 +105,28 @@ class TestUILayoutRedesign:
             
             result = run_vlm_analysis(cvd_grid, progress=progress)
             
-            original_report, status, cvd_report, original_vlm, cvd_results, comparison = result
+            # Result structure: [status, 9 card_reports, original_vlm, cvd_results, comparison]
+            status = result[0]
+            card_reports = result[1:10]
+            original_vlm = result[10]
+            cvd_results = result[11]
+            comparison = result[12]
             
-            # original_report should contain original WCAG evaluation
-            assert "Original" in original_report or "normal" in original_report.lower(), "Original report should mention original design"
+            assert status == "*Done — see reports above*"
+            assert len(card_reports) == 9, f"Should have 9 card reports, got {len(card_reports)}"
+            
+            # original_report should be in card_reports[0] (first card is original)
+            original_report = card_reports[0]
             assert "1.4.3" in original_report, "Original report should show original findings"
+            assert "Low Contrast" in original_report, "Original report should show original issue type"
             
-            # cvd_report should contain first CVD perspective evaluation
-            assert "Protanopia" in cvd_report or "CVD" in cvd_report, "CVD report should show CVD perspective"
+            # CVD reports should contain CVD findings
+            cvd_report = card_reports[1]  # Second card is Protanopia
             assert "1.4.1" in cvd_report, "CVD report should show CVD findings"
+            assert "Color Only Information" in cvd_report, "CVD report should show CVD issue type"
 
-    def test_handle_gallery_select_preserves_original_report(self):
-        """handle_gallery_select should only update CVD report, keep original report unchanged."""
-        from app import handle_gallery_select, analyze_single_perspective, _vlm_cache
-        
-        img = Image.new('RGB', (100, 50), color='purple')  # Unique color to avoid cache conflicts
-        cvd_grid = [
-            (img, "Normal vision (original design)"),
-            (img, "Protanopia (red-blind)"),
-            (img, "Deuteranopia (green-blind)"),
-        ]
-        
-        _vlm_cache.clear()
-        
-        # Pre-populate cache with original and CVD results
-        original_result = {"findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "moderate", "description": "Original issue", "location": "Body"}], "passes": False, "summary": "Original has issues", "cvd_label": "Normal vision (original design)"}
-        protan_result = {"findings": [{"type": "Color Only Information", "wcag_criterion": "1.4.1", "severity": "critical", "description": "Protan issue", "location": "Button"}], "passes": False, "summary": "Protan has issues", "cvd_label": "Protanopia (red-blind)"}
-        deuter_result = {"findings": [{"type": "Color Only Information", "wcag_criterion": "1.4.1", "severity": "serious", "description": "Deuter issue", "location": "Button"}], "passes": False, "summary": "Deuter has issues", "cvd_label": "Deuteranopia (green-blind)"}
-        
-        original_key = app_module._get_cache_key(img, "Normal vision (original design)")
-        protan_key = app_module._get_cache_key(img, "Protanopia (red-blind)")
-        deuter_key = app_module._get_cache_key(img, "Deuteranopia (green-blind)")
-        _vlm_cache[original_key] = original_result
-        _vlm_cache[protan_key] = protan_result
-        _vlm_cache[deuter_key] = deuter_result
-        
-        original_vlm = original_result
-        cvd_results = {"Protanopia (red-blind)": protan_result, "Deuteranopia (green-blind)": deuter_result}
-        
-        # Simulate clicking on Deuteranopia (index 2)
-        class MockEvent:
-            index = 2
-        
-        evt = MockEvent()
-        result = handle_gallery_select(evt, cvd_grid, original_vlm, cvd_results)
-        
-        # Returns: (original_report_update, cvd_report, comparison, new_cvd_results)
-        orig_report_update, cvd_report, comparison, new_cvd_results = result
-        
-        # original_report_update should be gr.update() (no change) or the original report
-        # The key assertion: original report should NOT be cleared (empty string)
-        assert orig_report_update != "", "Original report should not be cleared to empty string"
-        
-        # cvd_report should show Deuteranopia results
-        assert "Deuteranopia" in cvd_report or "deuter" in cvd_report.lower(), "CVD report should show selected CVD"
-        assert "1.4.1" in cvd_report, "CVD report should show selected CVD findings"
-
-    def test_handle_cvd_selector_change_updates_only_cvd_report(self):
-        """handle_cvd_selector_change should update CVD image and CVD report, keep original report."""
-        from app import handle_cvd_selector_change
-        
-        img = Image.new('RGB', (100, 50), color='orange')  # Unique color to avoid cache conflicts
-        
-        original_vlm = {"findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "moderate", "description": "Original issue", "location": "Body"}], "passes": False, "summary": "Original has issues", "cvd_label": "Normal vision (original design)"}
-        cvd_results = {
-            "Protanopia (red-blind)": {"findings": [{"type": "Color Only Information", "wcag_criterion": "1.4.1", "severity": "critical", "description": "Protan issue", "location": "Button"}], "passes": False, "summary": "Protan has issues", "cvd_label": "Protanopia (red-blind)"},
-            "Deuteranopia (green-blind)": {"findings": [{"type": "Color Only Information", "wcag_criterion": "1.4.1", "severity": "serious", "description": "Deuter issue", "location": "Button"}], "passes": False, "summary": "Deuter has issues", "cvd_label": "Deuteranopia (green-blind)"},
-        }
-        
-        # Change to deuteranopia
-        cvd_transformed, cvd_report, comparison = handle_cvd_selector_change('deuteranopia', img, original_vlm, cvd_results)
-        
-        assert cvd_transformed is not None, "Should return CVD transformed image"
-        assert cvd_report != gr.update(), "Should return updated CVD report"
-        assert "Deuteranopia" in cvd_report or "deuter" in cvd_report.lower(), "CVD report should show Deuteranopia results"
-        assert "Deuteranopia" in comparison, "Comparison should show Deuteranopia results"
-
-    def test_original_image_displayed_on_upload(self):
-        """handle_file_upload should return original image for original_image component."""
+    def test_handle_file_upload_populates_all_cards(self):
+        """handle_file_upload should populate all 9 perspective cards with images."""
         from app import handle_file_upload
         import io
         
@@ -186,18 +138,33 @@ class TestUILayoutRedesign:
         
         result = handle_file_upload(file_bytes)
         
-        # Returns: gallery, current_cvd_grid, original_image, cvd_image, current_original, current_original_vlm, current_cvd_results, wcag_comparison_output
-        gallery, cvd_grid_state, original_image, cvd_image, current_original, current_original_vlm, current_cvd_results, comparison = result
+        # Result structure: [cvd_grid_hidden, cvd_grid_state, container_visible, 9 card_images, 9 card_reports, comparison]
+        cvd_grid_hidden = result[0]
+        cvd_grid_state = result[1]
+        container_visible = result[2]
+        card_images = result[3:12]
+        card_reports = result[12:21]
+        comparison = result[21]
         
-        # original_image should be the PIL Image
-        assert isinstance(original_image, Image.Image), "original_image should be a PIL Image"
-        assert original_image.size == (100, 100), "original_image should have correct size"
+        # cvd_grid_hidden (gallery) should have 9 entries
+        assert len(cvd_grid_hidden) == 9, f"Gallery should have 9 entries, got {len(cvd_grid_hidden)}"
         
-        # current_original should be the same PIL Image
-        assert current_original is original_image, "current_original should reference the same image"
+        # cvd_grid_state should have 9 entries
+        assert len(cvd_grid_state) == 9, f"cvd_grid_state should have 9 entries, got {len(cvd_grid_state)}"
         
-        # Gallery should have 9 entries (1 original + 8 CVD)
-        assert len(gallery) == 9, f"Gallery should have 9 entries, got {len(gallery)}"
+        # Container should be visible
+        assert container_visible, "Comparison grid container should be visible"
+        
+        # Should have 9 card images
+        assert len(card_images) == 9, f"Should have 9 card images, got {len(card_images)}"
+        for card_img in card_images:
+            assert isinstance(card_img, Image.Image), "Each card image should be a PIL Image"
+        
+        # Should have 9 card reports with placeholders
+        assert len(card_reports) == 9, f"Should have 9 card reports, got {len(card_reports)}"
+        for card_report in card_reports:
+            assert isinstance(card_report, str)
+            assert "WCAG results will appear" in card_report
 
     def test_caching_keys_on_original_screenshot(self):
         """VLM cache should key on original screenshot, not selected thumbnail."""

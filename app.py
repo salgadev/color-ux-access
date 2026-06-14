@@ -630,55 +630,59 @@ _theme_css = """
 :root { --color-primary: #1E88E5; }
 .gradio-container { font-family: 'Inter', Arial, sans-serif; }
 
-/* Split-view comparison grid: responsive two-column layout */
-.split-view-grid {
+/* Comparison Grid: perspective cards layout */
+.comparison-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
 }
 
-.split-view-column {
+.perspective-card {
     display: flex;
     flex-direction: column;
-    min-width: 0;  /* Allow column to shrink below content */
-}
-
-.split-view-column > * {
-    flex: 1;
-    min-height: 0;  /* Allow flex children to scroll */
-}
-
-/* Image containers: fixed aspect ratio, scroll if content overflows */
-.split-view-image-container {
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    overflow: auto;
+    min-width: 0;
     border: 1px solid var(--border-color-primary, #e0e0e0);
-    border-radius: 8px;
+    border-radius: 12px;
+    background: var(--background-fill-primary, #fff);
+    overflow: hidden;
+}
+
+.perspective-card-header {
+    padding: 0.75rem 1rem;
+    background: var(--background-fill-secondary, #fafafa);
+    border-bottom: 1px solid var(--border-color-primary, #e0e0e0);
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--body-text-color, #1f1f1f);
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.perspective-card-image-wrapper {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
     background: var(--background-fill-secondary, #fafafa);
 }
 
-.split-view-image-container img {
+.perspective-card-image-wrapper img {
     width: 100%;
-    height: 100%;
+    aspect-ratio: 4 / 3;
     object-fit: contain;
     display: block;
 }
 
-/* Report containers: scrollable markdown content */
-.split-view-report-container {
-    width: 100%;
-    flex: 1;
-    min-height: 200px;
-    max-height: 400px;
-    overflow: auto;
-    border: 1px solid var(--border-color-primary, #e0e0e0);
-    border-radius: 8px;
+.perspective-card-report {
     padding: 1rem;
-    background: var(--background-fill-primary, #fff);
+    min-height: 180px;
+    max-height: 300px;
+    overflow: auto;
+    border-top: 1px solid var(--border-color-primary, #e0e0e0);
+    font-size: 0.8rem;
+    line-height: 1.5;
 }
 
 /* Gallery: fixed 4:3 aspect ratio per thumbnail, centered crop */
@@ -708,49 +712,47 @@ _theme_css = """
     display: block;
 }
 
-/* Responsive breakpoints */
+/* Responsive breakpoints for comparison grid */
 @media (max-width: 1440px) {
-    .split-view-grid {
+    .comparison-grid {
         gap: 0.75rem;
     }
-    .split-view-report-container {
-        max-height: 350px;
-    }
-}
-
-@media (max-width: 1024px) {
-    .split-view-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-    .split-view-report-container {
-        max-height: 300px;
-    }
-}
-
-@media (max-width: 768px) {
-    .split-view-grid {
-        gap: 0.75rem;
-    }
-    .split-view-image-container {
-        aspect-ratio: 16 / 9;
-    }
-    .split-view-report-container {
+    .perspective-card-report {
         max-height: 250px;
     }
 }
 
-@media (max-width: 375px) {
-    .split-view-grid {
-        gap: 0.5rem;
+@media (max-width: 1024px) {
+    .comparison-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
     }
-    .split-view-image-container {
-        aspect-ratio: 1 / 1;
+    .perspective-card-report {
+        max-height: 220px;
     }
-    .split-view-report-container {
+}
+
+@media (max-width: 768px) {
+    .comparison-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    .perspective-card-report {
         max-height: 200px;
         padding: 0.75rem;
-        font-size: 0.875rem;
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .comparison-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    .perspective-card-report {
+        max-height: 180px;
+        padding: 0.5rem;
+        font-size: 0.75rem;
     }
 }
 
@@ -782,12 +784,10 @@ with gr.Blocks(
         '**Test any webpage for colorblind accessibility issues.**\n\n'
         '1. Capture your screen (OS/Browser screenshot tool)\n'
         '2. Upload the screenshot below\n'
-        '3. The split-view grid shows Original (left) and CVD Variant (right)\n'
-        '4. Each column has independent scrolling for image and WCAG report\n'
-        '5. Select a CVD variant to see the transformed view on the right\n'
-        '6. Click Analyze to run WCAG evaluation\n\n'
-        'Left column = original design + original WCAG. Right column = CVD view + CVD WCAG.\n'
-        'Below: CVD gallery for quick switching. Bottom: side-by-side criterion comparison.'
+        '3. The comparison grid shows all 9 perspectives simultaneously\n'
+        '4. Each card has: label, CVD-simulated image, and WCAG results placeholder\n'
+        '5. Click Analyze to run WCAG evaluation for all perspectives\n\n'
+        'All perspectives render on upload — no tab switching required.'
     )
 
     with gr.Row():
@@ -804,59 +804,45 @@ with gr.Blocks(
                 visible=True,
             )
 
-    # CVD Variant Selector
-    with gr.Row():
-        cvd_selector = gr.Radio(
-            label='CVD Variant',
-            choices=[
-                ('Protanopia (red-blind)', 'protanopia'),
-                ('Severe Protanopia (red-blind)', 'severe_protanopia'),
-                ('Deuteranopia (green-blind)', 'deuteranopia'),
-                ('Severe Deuteranopia (green-blind)', 'severe_deuteranopia'),
-                ('Tritanopia (blue-blind)', 'tritanopia'),
-                ('Protanomaly (red-weak)', 'protanomaly'),
-                ('Deuteranomaly (green-weak)', 'deuteranomaly'),
-                ('Tritanomaly (blue-weak)', 'tritanomaly'),
-            ],
-            value='protanopia',
-            interactive=True,
-        )
+    # Comparison Grid: 9 Perspective Cards (Original + 8 CVD variants)
+    # Each card: label, image, WCAG report placeholder
+    # Pre-create all 9 cards in the UI (Gradio requires components to be created in Blocks context)
+    perspective_labels = [
+        "Normal vision (original design)",
+        "Protanopia (red-blind)",
+        "Severe Protanopia (red-blind)",
+        "Deuteranopia (green-blind)",
+        "Severe Deuteranopia (green-blind)",
+        "Tritanopia (blue-blind)",
+        "Protanomaly (red-weak)",
+        "Deuteranomaly (green-weak)",
+        "Tritanomaly (blue-weak)",
+    ]
 
-    # Split-view Comparison Grid: Original (left) | CVD Variant (right)
-    # Each column has independent scrolling for image and WCAG report
-    with gr.Group(elem_classes=['split-view-grid']) as split_view_container:
-        # Left column: Original Design
-        with gr.Column(elem_classes=['split-view-column']):
-            gr.Markdown('### Original Design')
-            with gr.Group(elem_classes=['split-view-image-container']):
-                original_image = gr.Image(label='Original', type='pil', show_label=False, container=False)
-            gr.Markdown('### WCAG Report – Original Design')
-            with gr.Group(elem_classes=['split-view-report-container']):
-                original_report_output = gr.Markdown(
-                    label='WCAG Report – Original Design',
-                    value='*Upload a screenshot and click Analyze to see the original WCAG evaluation.*',
-                    container=False,
-                )
+    with gr.Group(elem_classes=['comparison-grid'], visible=False) as comparison_grid_container:
+        perspective_images = []
+        perspective_reports = []
+        for label in perspective_labels:
+            with gr.Group(elem_classes=['perspective-card']):
+                gr.Markdown(f'### {label}', elem_classes=['perspective-card-header'])
+                with gr.Group(elem_classes=['perspective-card-image-wrapper']):
+                    img_comp = gr.Image(label=label, type='pil', show_label=False, container=False)
+                    perspective_images.append(img_comp)
+                with gr.Group(elem_classes=['perspective-card-report']):
+                    report_comp = gr.Markdown(
+                        label=f'WCAG — {label}',
+                        value=f'*{label} — WCAG results will appear after clicking Analyze*',
+                        container=False,
+                    )
+                    perspective_reports.append(report_comp)
 
-        # Right column: CVD Transformed View
-        with gr.Column(elem_classes=['split-view-column']):
-            gr.Markdown('### CVD Transformed View')
-            with gr.Group(elem_classes=['split-view-image-container']):
-                cvd_image = gr.Image(label='CVD View', type='pil', show_label=False, container=False)
-            gr.Markdown('### WCAG Report – Selected CVD Perspective')
-            with gr.Group(elem_classes=['split-view-report-container']):
-                cvd_report_output = gr.Markdown(
-                    label='WCAG Report – Selected CVD Perspective',
-                    value='*Select a CVD variant and click Analyze to see the CVD WCAG evaluation.*',
-                    container=False,
-                )
-
-    # CVD Gallery below split-view
+    # CVD Gallery (hidden, kept for backward compatibility with selection logic)
     cvd_grid = gr.Gallery(
         label='Color-Vision Simulation Gallery (9 variants: original + 8 CVD)',
         columns=5,
         object_fit='cover',
         height=300,
+        visible=False,
     )
 
     # Side-by-side WCAG Comparison Panel
@@ -874,80 +860,44 @@ with gr.Blocks(
     current_cvd_results = gr.State({})     # Dict of CVD label -> VLM result
 
     def handle_file_upload(file_obj):
-        """On file upload: generate gallery images immediately (no VLM)."""
+        """On file upload: generate gallery images and populate all perspective cards."""
         if file_obj is None:
-            return [], gr.update(), None, None, None, None, {}, ""
+            # Return empty states for all outputs
+            empty_gallery = []
+            empty_cvd_grid = []
+            empty_values = [None] * 9 + [''] * 9
+            empty_comparison = '*Run Analyze to see side-by-side criterion comparison.*'
+            return [empty_gallery, empty_cvd_grid, gr.update(visible=True)] + empty_values + [empty_comparison]
+        
         image_bytes = file_obj if isinstance(file_obj, bytes) else file_obj.read()
         try:
             original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         except Exception as e:
-            return [], f'Could not open image: {e}', None, None, None, None, {}, ""
+            empty_gallery = []
+            empty_cvd_grid = []
+            error_msg = f'Could not open image: {e}'
+            empty_values = [None] * 9 + [''] * 9
+            return [empty_gallery, empty_cvd_grid, gr.update(visible=True)] + empty_values + [error_msg]
+        
         gallery = generate_cvd_gallery(original)
-        # Return gallery for grid, gallery for state, original for original_image,
-        # and default CVD transformed for cvd_image, plus reset VLM states
-        default_variant = 'protanopia'
-        cvd_transformed = get_cvd_transformed(original, default_variant)
+        # gallery has 9 entries: original + 8 CVD variants
+        # Return gallery for cvd_grid (hidden), state, grid container visible,
+        # then 9 card images, 9 card reports, comparison output
+        
+        card_images = []
+        card_reports = []
+        for img, label in gallery:
+            card_images.append(img)
+            card_reports.append(f'*{label} — WCAG results will appear after clicking Analyze*')
+        
         empty_comparison = '*Run Analyze to see side-by-side criterion comparison.*'
-        return gallery, gallery, original, cvd_transformed, original, None, {}, empty_comparison
-
-    def handle_cvd_selector_change(variant, original_img, original_vlm, cvd_results):
-        """On CVD variant change: update right column image, CVD report, and comparison panel."""
-        if original_img is None:
-            return None, gr.update(), gr.update()
-        cvd_transformed = get_cvd_transformed(original_img, variant)
-
-        # Update CVD report and comparison panel if we have VLM results
-        cvd_report = gr.update()
-        comparison = gr.update()
-        if original_vlm is not None and cvd_results:
-            # Find the CVD label for this variant
-            variant_to_label = {
-                'protanopia': 'Protanopia (red-blind)',
-                'severe_protanopia': 'Severe Protanopia (red-blind)',
-                'deuteranopia': 'Deuteranopia (green-blind)',
-                'severe_deuteranopia': 'Severe Deuteranopia (green-blind)',
-                'tritanopia': 'Tritanopia (blue-blind)',
-                'protanomaly': 'Protanomaly (red-weak)',
-                'deuteranomaly': 'Deuteranomaly (green-weak)',
-                'tritanomaly': 'Tritanomaly (blue-weak)',
-            }
-            cvd_label = variant_to_label.get(variant, variant)
-            cvd_result = cvd_results.get(cvd_label)
-            if cvd_result is not None:
-                cvd_report = format_wcag_report(cvd_result)
-                comparison = format_wcag_comparison(original_vlm, cvd_result, cvd_label)
-
-        return cvd_transformed, cvd_report, comparison
-
-    def handle_gallery_select(evt, cvd_grid_state, original_vlm, cvd_results):
-        """On gallery image click: run VLM on just that single perspective (cached)."""
-        if not cvd_grid_state:
-            return gr.update(), "*No images loaded.*", gr.update(), cvd_results or {}
-        index = evt.index if hasattr(evt, 'index') else 0
-        if index >= len(cvd_grid_state):
-            return gr.update(), "*Invalid selection.*", gr.update(), cvd_results or {}
-        img, label = cvd_grid_state[index]
-        try:
-            vlm_result = analyze_single_perspective(img, label)
-        except Exception as e:
-            vlm_result = {'error': str(e), 'findings': [], 'passes': False}
-
-        # Update CVD results cache
-        new_cvd_results = cvd_results.copy() if cvd_results else {}
-        new_cvd_results[label] = vlm_result
-
-        # Generate comparison if we have original VLM result
-        comparison = gr.update()
-        if original_vlm is not None:
-            comparison = format_wcag_comparison(original_vlm, vlm_result, label)
-
-        # Return gr.update() for original_report_output (no change), CVD report for selected, comparison, updated cvd_results
-        return gr.update(), format_wcag_report(vlm_result), comparison, new_cvd_results
+        return [gallery, gallery, gr.update(visible=True)] + card_images + card_reports + [empty_comparison]
 
     def run_vlm_analysis(cvd_grid_state, progress=gr.Progress()):
         """On Analyze click: run VLM on the pre-generated CVD grid with caching."""
         if not cvd_grid_state:
-            return 'Please upload a screenshot first.', '*No images loaded*', '*Select a CVD variant and click Analyze to see the CVD WCAG evaluation.*', None, {}, '*Run Analyze to see side-by-side criterion comparison.*'
+            empty_values = ['Please upload a screenshot first.', '*No images loaded*'] + [''] * 9 + [None, {}, '*Run Analyze to see side-by-side criterion comparison.*']
+            return empty_values
         try:
             vlm_result = analyze_all_perspectives_with_cache(cvd_grid_state, progress=progress)
         except Exception as e:
@@ -966,51 +916,42 @@ with gr.Blocks(
                 else:
                     cvd_results[label] = cached
 
-        # Generate original report (top section) and first CVD report (bottom section)
-        original_report = "*Upload a screenshot and click Analyze to see the original WCAG evaluation.*"
-        cvd_report = "*Select a CVD variant and click Analyze to see the CVD WCAG evaluation.*"
+        # Generate WCAG reports for all 9 perspectives
+        card_reports = []
+        for img, label in cvd_grid_state:
+            cache_key = _get_cache_key(img, label)
+            if cache_key in _vlm_cache:
+                cached = _vlm_cache[cache_key]
+                card_reports.append(format_wcag_report(cached))
+            else:
+                card_reports.append(f'*{label} — Analysis pending*')
+
         comparison = '*Run Analyze to see side-by-side criterion comparison.*'
-        
-        if original_vlm is not None:
-            original_report = format_wcag_report(original_vlm)
-        if cvd_results:
+        if original_vlm is not None and cvd_results:
             first_cvd_label = next(iter(cvd_results))
             first_cvd_result = cvd_results[first_cvd_label]
-            cvd_report = format_wcag_report(first_cvd_result)
-            if original_vlm is not None:
-                comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
+            comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
 
-        # Return original_report, status, cvd_report, original_vlm, cvd_results, comparison
-        return original_report, "*Done — see reports above*", cvd_report, original_vlm, cvd_results, comparison
+        # Return: status, card_reports (9), original_vlm, cvd_results, comparison
+        return ["*Done — see reports above*"] + card_reports + [original_vlm, cvd_results, comparison]
 
-    # File upload triggers gallery generation immediately (no VLM)
+    # File upload triggers gallery generation and card population immediately (no VLM)
+    # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
+    # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
+    upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
     file_input.change(
         fn=handle_file_upload,
         inputs=file_input,
-        outputs=[cvd_grid, current_cvd_grid, original_image, cvd_image, current_original, current_original_vlm, current_cvd_results, wcag_comparison_output],
-    )
-
-    # CVD selector change updates right column image, CVD report, and comparison panel
-    cvd_selector.change(
-        fn=handle_cvd_selector_change,
-        inputs=[cvd_selector, current_original, current_original_vlm, current_cvd_results],
-        outputs=[cvd_image, cvd_report_output, wcag_comparison_output],
-    )
-
-    # Gallery click triggers VLM on single image (cached after first call)
-    cvd_grid.select(
-        fn=handle_gallery_select,
-        inputs=[current_cvd_grid, current_original_vlm, current_cvd_results],
-        outputs=[original_report_output, cvd_report_output, wcag_comparison_output, current_cvd_results],
+        outputs=upload_outputs,
     )
 
     # Analyze button triggers VLM on all perspectives with progress
-    # NOTE: This function and its click wiring are designed to keep
-    # Gradio's loading spinner and/or progress UI working.
+    # Outputs: status_output, 9 perspective_reports, current_original_vlm, current_cvd_results, wcag_comparison_output
+    analyze_outputs = [status_output] + perspective_reports + [current_original_vlm, current_cvd_results, wcag_comparison_output]
     submit_btn.click(
         fn=run_vlm_analysis,
         inputs=current_cvd_grid,
-        outputs=[original_report_output, status_output, cvd_report_output, current_original_vlm, current_cvd_results, wcag_comparison_output],
+        outputs=analyze_outputs,
     )
 
 
