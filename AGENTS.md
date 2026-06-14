@@ -107,6 +107,15 @@ requirements.txt    # generated (Spaces deployment)
 3. The app expects a screenshot image to be uploaded directly — no URL capture or browser automation is needed.
 4. Tests must not call the VLM — mock it with `mock_vlm_factory` from `conftest`.
 
+### Pre-commit Hooks
+
+A local pre-commit hook (`block-root-fix-scripts` in `.pre-commit-config.yaml`) blocks commits that stage Python files matching `*fix*.py` or `apply_*.py` at the repository root. This prevents one-off fix scripts from being committed to the root directory.
+
+- **Allowed:** `scripts/fix_issue.py`, `tests/test_fix.py`, `normal_script.py`
+- **Blocked:** `fix_issue.py`, `apply_dummy.py`, `fix_v2.py` (at root)
+
+To temporarily bypass: `git commit --no-verify` (use sparingly).
+
 ## Documentation
 
 | File | Purpose |
