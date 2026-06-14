@@ -68,7 +68,7 @@ class TestComparisonGridLayout:
         # Should have perspective-card CSS classes
         assert "perspective-card" in source, "Should have perspective-card CSS class"
         assert "perspective-card-header" in source, "Should have card header class"
-        assert "perspective-card-image-wrapper" in source, "Should have image wrapper class"
+        assert "perspective-card-image" in source, "Should have image class"
         assert "perspective-card-report" in source, "Should have report class"
 
         # Should loop through labels to create cards
@@ -164,7 +164,7 @@ class TestComparisonGridLayout:
 
         # Should have responsive breakpoints
         assert '@media (max-width: 1024px)' in source, "Should have 1024px breakpoint"
-        assert '@media (max-width: 768px)' in source, "Should have 768px breakpoint"
+        assert '@media (max-width: 600px)' in source, "Should have 600px breakpoint (tablet)"
         assert '@media (max-width: 480px)' in source, "Should have 480px breakpoint (mobile)"
 
         # Should stack to 2 columns at 1024px
@@ -183,11 +183,11 @@ class TestPerspectiveCardComponents:
 
         # Card structure: gr.Group(perspective-card) contains:
         # - gr.Markdown (header with label)
-        # - gr.Group(perspective-card-image-wrapper) with gr.Image
+        # - gr.Image (with perspective-card-image class)
         # - gr.Group(perspective-card-report) with gr.Markdown (WCAG results)
         assert "perspective-card" in source
         assert "perspective-card-header" in source
-        assert "perspective-card-image-wrapper" in source
+        assert "perspective-card-image" in source
         assert "perspective-card-report" in source
 
 
