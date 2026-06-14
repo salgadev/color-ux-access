@@ -891,12 +891,14 @@ with gr.Blocks(
         return gallery, gallery, original, cvd_transformed, original, None, {}, empty_comparison
 
     def handle_cvd_selector_change(variant, original_img, original_vlm, cvd_results):
-        """On CVD variant change: update right column image and comparison panel."""
+        """On CVD variant change: update right column image, CVD report, and comparison panel."""
         if original_img is None:
-            return None, gr.update()
+            return None, gr.update(), gr.update()
         cvd_transformed = get_cvd_transformed(original_img, variant)
 
-        # Update comparison panel if we have VLM results
+        # Update CVD report and comparison panel if we have VLM results
+        cvd_report = gr.update()
+        comparison = gr.update()
         if original_vlm is not None and cvd_results:
             # Find the CVD label for this variant
             variant_to_label = {
@@ -912,18 +914,18 @@ with gr.Blocks(
             cvd_label = variant_to_label.get(variant, variant)
             cvd_result = cvd_results.get(cvd_label)
             if cvd_result is not None:
+                cvd_report = format_wcag_report(cvd_result)
                 comparison = format_wcag_comparison(original_vlm, cvd_result, cvd_label)
-                return cvd_transformed, comparison
 
-        return cvd_transformed, gr.update()
+        return cvd_transformed, cvd_report, comparison
 
     def handle_gallery_select(evt, cvd_grid_state, original_vlm, cvd_results):
         """On gallery image click: run VLM on just that single perspective (cached)."""
         if not cvd_grid_state:
-            return "*No images loaded.*", "", gr.update()
+            return gr.update(), "*No images loaded.*", gr.update(), cvd_results or {}
         index = evt.index if hasattr(evt, 'index') else 0
         if index >= len(cvd_grid_state):
-            return "*Invalid selection.*", "", gr.update()
+            return gr.update(), "*Invalid selection.*", gr.update(), cvd_results or {}
         img, label = cvd_grid_state[index]
         try:
             vlm_result = analyze_single_perspective(img, label)
@@ -939,17 +941,18 @@ with gr.Blocks(
         if original_vlm is not None:
             comparison = format_wcag_comparison(original_vlm, vlm_result, label)
 
-        return "", format_wcag_report(vlm_result), comparison, new_cvd_results
+        # Return gr.update() for original_report_output (no change), CVD report for selected, comparison, updated cvd_results
+        return gr.update(), format_wcag_report(vlm_result), comparison, new_cvd_results
 
     def run_vlm_analysis(cvd_grid_state, progress=gr.Progress()):
         """On Analyze click: run VLM on the pre-generated CVD grid with caching."""
         if not cvd_grid_state:
-            return 'Please upload a screenshot first.', '*No images loaded*', '', None, {}, '*Run Analyze to see side-by-side criterion comparison.*'
+            return 'Please upload a screenshot first.', '*No images loaded*', '*Select a CVD variant and click Analyze to see the CVD WCAG evaluation.*', None, {}, '*Run Analyze to see side-by-side criterion comparison.*'
         try:
             vlm_result = analyze_all_perspectives_with_cache(cvd_grid_state, progress=progress)
         except Exception as e:
             vlm_result = {'error': str(e), 'findings': [], 'passes': False}
-        report = format_wcag_report(vlm_result)
+        merged_report = format_wcag_report(vlm_result)
 
         # Extract individual perspective results from cache
         original_vlm = None
@@ -963,15 +966,22 @@ with gr.Blocks(
                 else:
                     cvd_results[label] = cached
 
-        # Generate initial comparison with first CVD result (or default to first available)
+        # Generate original report (top section) and first CVD report (bottom section)
+        original_report = "*Upload a screenshot and click Analyze to see the original WCAG evaluation.*"
+        cvd_report = "*Select a CVD variant and click Analyze to see the CVD WCAG evaluation.*"
         comparison = '*Run Analyze to see side-by-side criterion comparison.*'
-        if original_vlm is not None and cvd_results:
+        
+        if original_vlm is not None:
+            original_report = format_wcag_report(original_vlm)
+        if cvd_results:
             first_cvd_label = next(iter(cvd_results))
             first_cvd_result = cvd_results[first_cvd_label]
-            comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
+            cvd_report = format_wcag_report(first_cvd_result)
+            if original_vlm is not None:
+                comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
 
-        # Return merged report, status, empty for cvd_report_output, original_vlm, cvd_results, comparison
-        return report, "*Done — see report above*", '', original_vlm, cvd_results, comparison
+        # Return original_report, status, cvd_report, original_vlm, cvd_results, comparison
+        return original_report, "*Done — see reports above*", cvd_report, original_vlm, cvd_results, comparison
 
     # File upload triggers gallery generation immediately (no VLM)
     file_input.change(
@@ -980,11 +990,11 @@ with gr.Blocks(
         outputs=[cvd_grid, current_cvd_grid, original_image, cvd_image, current_original, current_original_vlm, current_cvd_results, wcag_comparison_output],
     )
 
-    # CVD selector change updates right column image and comparison panel
+    # CVD selector change updates right column image, CVD report, and comparison panel
     cvd_selector.change(
         fn=handle_cvd_selector_change,
         inputs=[cvd_selector, current_original, current_original_vlm, current_cvd_results],
-        outputs=[cvd_image, wcag_comparison_output],
+        outputs=[cvd_image, cvd_report_output, wcag_comparison_output],
     )
 
     # Gallery click triggers VLM on single image (cached after first call)
