@@ -627,9 +627,6 @@ def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
 # -- Gradio App ---------------------------------------------------------------
 
 _theme_css = """
-:root { --color-primary: #1E88E5; }
-.gradio-container { font-family: 'Inter', Arial, sans-serif; }
-
 /* Comparison Grid: perspective cards layout */
 .comparison-grid {
     display: grid;
@@ -638,6 +635,7 @@ _theme_css = """
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    box-sizing: border-box;
 }
 
 .perspective-card {
@@ -648,6 +646,7 @@ _theme_css = """
     border-radius: 12px;
     background: var(--background-fill-primary, #fff);
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .perspective-card-header {
@@ -659,16 +658,21 @@ _theme_css = """
     color: var(--body-text-color, #1f1f1f);
     text-align: center;
     flex-shrink: 0;
+    word-break: break-word;
+    white-space: normal;
 }
 
-.perspective-card-image-wrapper {
+.perspective-card-image {
     flex: 1;
     min-height: 0;
     overflow: auto;
     background: var(--background-fill-secondary, #fafafa);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.perspective-card-image-wrapper img {
+.perspective-card-image img {
     width: 100%;
     aspect-ratio: 4 / 3;
     object-fit: contain;
@@ -685,23 +689,23 @@ _theme_css = """
     line-height: 1.5;
 }
 
-/* Gallery: fixed 4:3 aspect ratio per thumbnail, centered crop */
-.gallery .grid-container .image-item,
-.gallery .grid-container [data-testid="gallery"] .image-container {
+/* CVD Gallery: scoped selectors (replaces internal Gradio selectors) */
+.cvd-gallery img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    object-position: center center;
+}
+.cvd-gallery .image-item,
+.cvd-gallery .image-container {
     aspect-ratio: 4 / 3 !important;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-.gallery img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover !important;
-    object-position: center center;
-}
 /* Caption labels: truncate long labels to 1 line */
-.thumbnail-item .caption-label {
+.cvd-gallery .caption-label {
     font-size: 0.75rem;
     line-height: 1.2;
     overflow: hidden;
@@ -713,15 +717,6 @@ _theme_css = """
 }
 
 /* Responsive breakpoints for comparison grid */
-@media (max-width: 1440px) {
-    .comparison-grid {
-        gap: 0.75rem;
-    }
-    .perspective-card-report {
-        max-height: 250px;
-    }
-}
-
 @media (max-width: 1024px) {
     .comparison-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -732,9 +727,9 @@ _theme_css = """
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 600px) {
     .comparison-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
         gap: 0.75rem;
     }
     .perspective-card-report {
@@ -746,21 +741,14 @@ _theme_css = """
 
 @media (max-width: 480px) {
     .comparison-grid {
-        grid-template-columns: 1fr;
         gap: 0.5rem;
     }
     .perspective-card-report {
-        max-height: 180px;
+        max-height: none;
+        overflow: visible;
         padding: 0.5rem;
         font-size: 0.75rem;
     }
-}
-
-/* Ensure no horizontal overflow on any viewport */
-.gradio-container,
-.gradio-container * {
-    max-width: 100%;
-    box-sizing: border-box;
 }
 """
 
@@ -779,34 +767,36 @@ with gr.Blocks(
     **({"theme": _launch_theme, "css": _launch_css} if not _is_gradio6 else {}),
 ) as demo:
 
-    gr.Markdown('# Color-UX-Access')
-    gr.Markdown(
-        '**Test any webpage for colorblind accessibility issues.**\n\n'
-        '1. Capture your screen (OS/Browser screenshot tool)\n'
-        '2. Upload the screenshot below\n'
-        '3. The comparison grid shows all 9 perspectives simultaneously\n'
-        '4. Each card has: label, CVD-simulated image, and WCAG results placeholder\n'
-        '5. Click Analyze to run WCAG evaluation for all perspectives\n\n'
-        'All perspectives render on upload — no tab switching required.'
-    )
+    # 1. Title/description wrapped in a top-level Group
+    with gr.Group():
+        gr.Markdown('# Color-UX-Access')
+        gr.Markdown(
+            '**Test any webpage for colorblind accessibility issues.**\n\n'
+            '1. Capture your screen (OS/Browser screenshot tool)\n'
+            '2. Upload the screenshot below\n'
+            '3. The comparison grid shows all 9 perspectives simultaneously\n'
+            '4. Each card has: label, CVD-simulated image, and WCAG results placeholder\n'
+            '5. Click Analyze to run WCAG evaluation for all perspectives\n\n'
+            'All perspectives render on upload — no tab switching required.'
+        )
 
+    # 2. Top controls row: file upload (scale=2), Analyze button (scale=1, min_width=120), status (scale=3)
     with gr.Row():
         file_input = gr.File(
             label='Screenshot',
             file_types=['.png', '.jpg', '.jpeg', '.webp'],
             type='binary',
             height=80,
+            scale=2,
         )
-        with gr.Column(scale=1):
-            submit_btn = gr.Button('Analyze', variant='primary')
+        submit_btn = gr.Button('Analyze', variant='primary', scale=1, min_width=120)
+        with gr.Column(scale=3):
             status_output = gr.Markdown(
                 value='*Ready — upload a screenshot and click Analyze*',
                 visible=True,
             )
 
-    # Comparison Grid: 9 Perspective Cards (Original + 8 CVD variants)
-    # Each card: label, image, WCAG report placeholder
-    # Pre-create all 9 cards in the UI (Gradio requires components to be created in Blocks context)
+    # 3. Comparison grid: Row with Column(scale=12) holding 9 perspective cards
     perspective_labels = [
         "Normal vision (original design)",
         "Protanopia (red-blind)",
@@ -819,38 +809,47 @@ with gr.Blocks(
         "Tritanomaly (blue-weak)",
     ]
 
-    with gr.Group(elem_classes=['comparison-grid'], visible=False) as comparison_grid_container:
-        perspective_images = []
-        perspective_reports = []
-        for label in perspective_labels:
-            with gr.Group(elem_classes=['perspective-card']):
-                gr.Markdown(f'### {label}', elem_classes=['perspective-card-header'])
-                with gr.Group(elem_classes=['perspective-card-image-wrapper']):
-                    img_comp = gr.Image(label=label, type='pil', show_label=False, container=False)
+    with gr.Row():
+        with gr.Column(scale=12, elem_classes=['comparison-grid'], visible=False) as comparison_grid_container:
+            perspective_images = []
+            perspective_reports = []
+            for label in perspective_labels:
+                with gr.Group(elem_classes=['perspective-card']):
+                    gr.Markdown(f'### {label}', elem_classes=['perspective-card-header'])
+                    img_comp = gr.Image(
+                        label=label,
+                        type='pil',
+                        show_label=False,
+                        container=False,
+                        elem_classes=['perspective-card-image'],
+                    )
                     perspective_images.append(img_comp)
-                with gr.Group(elem_classes=['perspective-card-report']):
                     report_comp = gr.Markdown(
                         label=f'WCAG — {label}',
                         value=f'*{label} — WCAG results will appear after clicking Analyze*',
                         container=False,
+                        elem_classes=['perspective-card-report'],
                     )
                     perspective_reports.append(report_comp)
 
-    # CVD Gallery (hidden, kept for backward compatibility with selection logic)
+    # 4. CVD Gallery (hidden, kept for backward compatibility) with elem_classes
     cvd_grid = gr.Gallery(
         label='Color-Vision Simulation Gallery (9 variants: original + 8 CVD)',
         columns=5,
         object_fit='cover',
         height=300,
         visible=False,
+        elem_classes=['cvd-gallery'],
+        elem_id='cvd-gallery',
     )
 
-    # Side-by-side WCAG Comparison Panel
+    # 5. WCAG comparison Markdown below the grid in its own Row/Column
     with gr.Row():
-        wcag_comparison_output = gr.Markdown(
-            label='WCAG Comparison: Original vs CVD',
-            value='*Run Analyze to see side-by-side criterion comparison.*',
-        )
+        with gr.Column():
+            wcag_comparison_output = gr.Markdown(
+                label='WCAG Comparison: Original vs CVD',
+                value='*Run Analyze to see side-by-side criterion comparison.*',
+            )
 
     # State
     current_cvd_grid = gr.State([])
