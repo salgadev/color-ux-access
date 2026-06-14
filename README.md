@@ -62,6 +62,15 @@ See `docs/ARCHITECTURE.md` for detailed pipeline internals.
 
 ---
 
+## Project Structure & Constraints
+
+- All tests under `tests/` (e.g., `tests/test_*.py`)
+- No root-level fix scripts (`apply_*fixes*.py`, `*_fix*.py`, `insert_cache.py`, etc.)
+- Runtime logic in `app.py`, `server_app.py`, or clearly named helper modules
+- TDD mandatory: write tests first, then implementation
+
+---
+
 ## Quick Start
 
 ```bash
@@ -76,6 +85,26 @@ python app/app.py       # launch locally
 ```
 
 See `docs/DEVELOPMENT.md` for full setup, dependency groups, and git workflow.
+
+---
+
+## Development workflow (agents & humans)
+
+**Run the app**
+```bash
+uv run app.py
+```
+Gradio does **not** auto-reload on code changes. After any edit to `app.py` or UI-affecting modules, stop the server (`Ctrl+C`) and restart with the command above.
+
+**E2E test flow (Nous Browser)**
+```bash
+# 1. Start the app (see above)
+# 2. In another terminal, run the browser test against the local instance
+pytest -m e2e --base-url=http://127.0.0.1:7860
+```
+Test steps: upload `tests/fixtures/UR.webp` → click **Analyze** → verify the CVD grid renders and the WCAG report panel shows criteria rows.
+
+> Detailed contributor rules live in `agents.md`. This section covers the mechanical loop only.
 
 ---
 
