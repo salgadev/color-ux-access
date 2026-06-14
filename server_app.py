@@ -9,6 +9,10 @@ Serves:
   POST /api/wcag_report       → api_report_from_json → Markdown
 """
 
+# GUARDRAIL: Do not add self-modifying or patch scripts.
+# Implement changes directly in this file or in helper modules with tests.
+# Root-level *fix*.py / apply_*.py files are prohibited.
+
 from __future__ import annotations
 
 import os

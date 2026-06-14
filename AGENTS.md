@@ -141,3 +141,10 @@ When operating as an agent (e.g., Hermes Agent) in this repository:
 8. Check for Gradio ghost processes after running tests locally.
 9. Never commit secrets—use `.env.example` for template.
 10. When in doubt, prioritize generalization over site-specific fixes.
+
+## Agent Execution Rules (Hermes / MCP)
+
+1. **Restart app after changes** — terminate any running `uv run app.py`, start fresh instance, only test against new instance; note Gradio won't auto-reload.
+2. **Headed E2E browser tests** — use Nous Browser in headed mode, open app URL, perform upload `UR.webp` → verify CVD gallery → click Analyze → observe loading/progress and WCAG reports; keep window visible; must use headed browser for GUI/layout tasks.
+3. **TDD and test location** — add/update tests under `tests/` first, then change code; run `uv run pytest`, then restart app and run headed E2E.
+4. **No root-level fix scripts** — no `apply_*fixes*.py` or test files in root; tests under `tests/`, runtime in `app.py`/`server_app.py`/helpers.
