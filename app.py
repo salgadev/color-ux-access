@@ -154,7 +154,9 @@ def format_wcag_report(vlm_result: dict) -> str:
 
     perception_summary = (vlm_result.get('perception_summary') or '').strip()
     if perception_summary:
-        report += f"### VLM perception\n{perception_summary}\n\n"
+        report += f"> **👁️ VLM perception:** {perception_summary}\n\n"
+    else:
+        report += "\n"
 
     report += "### WCAG-style assessment\n\n"
 
