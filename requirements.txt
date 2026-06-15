@@ -162,12 +162,12 @@ propcache==0.5.2
     #   yarl
 protobuf==6.33.6
     # via modal
-pydantic==2.13.4
+pydantic==2.12.5
     # via
     #   fastapi
     #   gradio
     #   openai
-pydantic-core==2.46.4
+pydantic-core==2.41.5
     # via pydantic
 pydub==0.25.1
     # via gradio
