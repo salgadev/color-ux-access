@@ -1,14 +1,13 @@
 ---
 title: Color-UX-Access
 emoji: 🔍
-colorFrom: blue
-colorTo: gray
+colorFrom: orange
+colorTo: blue
 sdk: gradio
 sdk_version: "6.17.3"
 app_file: app.py
 python_version: "3.12"
-hardware: t4-small
-dependencies: requirements_space.txt
+dependencies: requirements.txt
 ---
 
 # Color-UX-Access

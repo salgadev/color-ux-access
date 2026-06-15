@@ -64,7 +64,7 @@ A Gradio app that tests any webpage screenshot for colorblind accessibility issu
 ```bash
 uv add some-package          # or edit pyproject.toml manually
 uv sync                      # updates uv.lock
-uv export --format requirements-txt --output-file requirements.txt  # regenerate for Spaces
+uv export --format requirements-txt --output-file requirements.txt --no-editable --no-emit-project --no-hashes
 git commit pyproject.toml uv.lock requirements.txt
 ```
 
