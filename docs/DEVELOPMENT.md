@@ -43,7 +43,7 @@ Defined in `pyproject.toml`:
 |-------|----------|-------------|
 | `default` | pillow, daltonlens, numpy | Always |
 | `dev` | playwright, pytest, colorspacious | Local testing |
-| `space` | gradio, spaces, torch, openai, huggingface_hub==0.25.2 | HF Space deployment |
+| `space` | gradio, spaces, torch, openai, daltonlens, requests, colorspacious, modal, python-dotenv | HF Space deployment |
 | `modal` | modal, fastapi, gradio | Modal deployment |
 | `all` | `dev` + `space` + `modal` | Full local development |
 
