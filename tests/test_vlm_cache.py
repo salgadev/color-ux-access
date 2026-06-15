@@ -207,3 +207,126 @@ def test_analyze_all_perspectives_with_cache_different_image() -> None:
 
         assert second_calls == first_calls + 2, \
             "Different image should trigger 2 new VLM calls"
+
+
+class TestFormatWcagReportFormatting:
+    """Verify the WCAG report rendering matches acceptance criteria."""
+
+    def test_perception_summary_at_top(self):
+        """perception_summary renders as 'VLM perception' section at the top."""
+        from app import format_wcag_report
+
+        result = {
+            "perception_summary": "Most text is readable but red buttons blend into the background.",
+            "findings": [],
+            "passes": True,
+        }
+        report = format_wcag_report(result)
+        assert "### VLM perception" in report
+        assert "Most text is readable" in report
+        perception_pos = report.index("VLM perception")
+        assessment_pos = report.index("WCAG-style assessment")
+        assert perception_pos < assessment_pos
+
+    def test_findings_include_all_fields(self):
+        """Findings render with type, WCAG criterion, severity icon, description, location."""
+        from app import format_wcag_report
+
+        result = {
+            "passes": False,
+            "findings": [
+                {
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "critical",
+                    "description": "Button text contrast ratio is 2.8:1",
+                    "location": "Submit button, top-right",
+                },
+                {
+                    "type": "Color Only Information",
+                    "wcag_criterion": "1.4.1",
+                    "severity": "serious",
+                    "description": "Red asterisk marks required fields",
+                    "location": "Form labels section",
+                },
+            ],
+            "summary": "2 issues found",
+        }
+        report = format_wcag_report(result)
+        assert "Low Contrast" in report
+        assert "Color Only Information" in report
+        assert "1.4.3" in report
+        assert "1.4.1" in report
+        assert "Button text contrast ratio is 2.8:1" in report
+        assert "Red asterisk marks required fields" in report
+        assert "Submit button, top-right" in report
+        assert "Form labels section" in report
+
+    def test_emoji_icons_are_real_unicode(self):
+        """Severity icons use real emoji (🔴🟠🟡) not colon-style codes."""
+        from app import format_wcag_report
+
+        result = {
+            "passes": False,
+            "findings": [
+                {"type": "Low Contrast", "wcag_criterion": "1.4.3",
+                 "severity": "critical", "description": "desc", "location": "loc"},
+                {"type": "Color Only", "wcag_criterion": "1.4.1",
+                 "severity": "serious", "description": "desc", "location": "loc"},
+                {"type": "Missing Alt", "wcag_criterion": "1.1.1",
+                 "severity": "moderate", "description": "desc", "location": "loc"},
+            ],
+            "summary": "Issues found",
+        }
+        report = format_wcag_report(result)
+        assert "🔴" in report
+        assert "🟠" in report
+        assert "🟡" in report
+        assert ":red_circle:" not in report
+        assert ":orange_circle:" not in report
+        assert ":yellow_circle:" not in report
+
+    def test_pass_fail_status_rendered(self):
+        """Pass/fail status is shown correctly in both pass and fail cases."""
+        from app import format_wcag_report
+
+        fail_result = {
+            "passes": False,
+            "findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3",
+                          "severity": "critical", "description": "desc", "location": "loc"}],
+            "summary": "Issues found",
+        }
+        fail_report = format_wcag_report(fail_result)
+        assert "Fail" in fail_report or "❌" in fail_report
+
+        pass_result = {"passes": True, "findings": [], "summary": "No issues"}
+        pass_report = format_wcag_report(pass_result)
+        assert "Pass" in pass_report or "✅" in pass_report
+
+    def test_empty_findings_shows_appropriate_message(self):
+        """No-findings case shows status and 'No accessibility issues detected' message."""
+        from app import format_wcag_report
+
+        pass_result = {"passes": True, "findings": [], "summary": "Clean"}
+        report = format_wcag_report(pass_result)
+        assert "No accessibility issues detected" in report
+        assert "Pass" in report or "✅" in report
+
+        fail_result = {"passes": False, "findings": [], "summary": "Failed"}
+        report = format_wcag_report(fail_result)
+        assert "No accessibility issues detected" in report
+        assert "Fail" in report or "❌" in report
+
+    def test_summary_included_at_end(self):
+        """The 'Summary:' line appears at the end when present."""
+        from app import format_wcag_report
+
+        result = {
+            "passes": False,
+            "findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3",
+                          "severity": "serious", "description": "desc", "location": "loc"}],
+            "summary": "1 critical issue found \u2014 button contrast is too low.",
+        }
+        report = format_wcag_report(result)
+        assert "**Summary:**" in report
+        assert "1 critical issue found" in report
