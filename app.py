@@ -940,28 +940,29 @@ with gr.Blocks(
             )
 
         # Return: status, card_reports (9), original_vlm, cvd_results, comparison
-        upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
+        return ["*Done — see reports above*"] + card_reports + [original_vlm, cvd_results, comparison]
 
-        # 2b. Clickable example screenshot row (pre-loaded, zero file I/O)
-        with gr.Row():
-            gr.Markdown('**Or click an example screenshot to load it instantly:**', scale=1)
-        with gr.Row():
-            for _fname in _EXAMPLE_FILENAMES:
-                if _fname in _EXAMPLE_IMAGES:
-                    _btn = gr.Button(
-                        value=f"📷 {_fname}",
-                        scale=1,
-                        min_width=140,
-                    )
-                    _btn.click(
-                        fn=lambda key=_fname: handle_example_click(key),
-                        outputs=upload_outputs,
-                    )
-
-        # File upload triggers gallery generation and card population immediately (no VLM)
-        # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
-        # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
+    # File upload triggers gallery generation and card population immediately (no VLM)
+    # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
+    # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
     upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
+
+    # 2b. Clickable example screenshot row (pre-loaded, zero file I/O)
+    with gr.Row():
+        gr.Markdown('**Or click an example screenshot to load it instantly:**', scale=1)
+    with gr.Row():
+        for _fname in _EXAMPLE_FILENAMES:
+            if _fname in _EXAMPLE_IMAGES:
+                _btn = gr.Button(
+                    value=f"📷 {_fname}",
+                    scale=1,
+                    min_width=140,
+                )
+                _btn.click(
+                    fn=lambda key=_fname: handle_example_click(key),
+                    outputs=upload_outputs,
+                )
+
     file_input.change(
         fn=handle_file_upload,
         inputs=file_input,
