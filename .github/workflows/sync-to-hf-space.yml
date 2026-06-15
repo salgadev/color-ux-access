@@ -1,0 +1,29 @@
+#!/usr/bin/env yaml
+name: Sync to HuggingFace Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-to-hf-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install huggingface_hub
+
+      - run: python scripts/sync_to_hf_space.py
+        env:
+          HF_SPACES_TOKEN: ${{ secrets.HF_SPACES_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
