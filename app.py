@@ -132,14 +132,20 @@ def format_wcag_report(vlm_result: dict) -> str:
     else:
         report = "## WCAG Accessibility Report\n\n"
 
+    perception_summary = (vlm_result.get('perception_summary') or '').strip()
+    if perception_summary:
+        report += f"### VLM perception\n{perception_summary}\n\n"
+
+    report += "### WCAG-style assessment\n\n"
+
     findings = vlm_result.get('findings', [])
     if not findings:
-        if vlm_result.get('passes', False):
-            return report + "Pass -- No accessibility issues detected."
-        return report + "No accessibility issues detected."
+        status = 'Pass' if vlm_result.get('passes', False) else 'Fail'
+        report += f"**Overall:** {status} — No accessibility issues detected.\n"
+        return report
 
     report += f"**Overall:** {'Pass' if vlm_result.get('passes', False) else 'Fail'}\n\n"
-    severity_icons = {'critical': ':red_circle:', 'serious': ':orange_circle:', 'moderate': ':yellow_circle:'}
+    severity_icons = {'critical': '🔴', 'serious': '🟠', 'moderate': '🟡'}
     wcag_links = {
         '1.1.1':  'https://www.w3.org/WAI/WCAG21/Understanding/non-text-content',
         '1.4.1':  'https://www.w3.org/WAI/WCAG21/Understanding/use-of-color',
@@ -148,7 +154,7 @@ def format_wcag_report(vlm_result: dict) -> str:
     }
 
     for i, f in enumerate(findings, 1):
-        icon = severity_icons.get(f.get('severity', 'moderate'))
+        icon = severity_icons.get(f.get('severity', 'moderate'), '🟡')
         wcag = f.get('wcag_criterion', 'N/A')
         link = wcag_links.get(wcag, '#')
         cvd_perspective = f.get('cvd_perspective', '')
@@ -328,6 +334,31 @@ def _format_comparison_no_findings(orig_passes: bool, cvd_passes: bool, cvd_labe
     return report
 
 
+def _format_cvd_perception_comparison_summary(
+    original_vlm: dict | None,
+    cvd_results: dict[str, dict],
+) -> str:
+    """Heuristic comparison of VLM perception summaries and pass states."""
+    lines = ["## Color-vision comparison (heuristic)\n\n", "| Perspective | VLM perception | Pass |\n", "|-------------|----------------|------|\n"]
+
+    entries: list[tuple[str, dict]] = []
+    if original_vlm is not None:
+        entries.append(("Original design", original_vlm))
+    for label, result in cvd_results.items():
+        entries.append((label, result))
+
+    for label, result in entries:
+        perception = (result.get("perception_summary", "") or "").strip()
+        if not perception:
+            perception = "—"
+        passes = "✅ Pass" if result.get("passes", False) else "❌ Fail"
+        lines.append(f"| {label} | {perception} | {passes} |\n")
+
+    all_pass = all(result.get("passes", False) for _, result in entries)
+    lines.append(f"\n**Overall:** {'Heuristic pass' if all_pass else 'Heuristic fail'} — not a substitute for full WCAG audit.")
+    return "".join(lines)
+
+
 # -- VLM Inference ------------------------------------------------------------
 
 _VLM_CVD_PROMPTS = {
@@ -398,8 +429,12 @@ _VLM_CVD_PROMPTS = {
 }
 
 _ACCESSIBILITY_SYSTEM_PROMPT = (
-    "Output a JSON object with this structure:\n"
+    "You are an accessibility expert analyzing a webpage screenshot from the perspective "
+    "of a colorblind user to infer likely WCAG-style issues for that vision type only. "
+    "Respond with a single JSON object and nothing else (no markdown, no comments). "
+    "JSON shape:\n"
     "{\n"
+    '  "perception_summary": "One short sentence on how easy or hard it is to understand important information without relying on color from this CVD perspective.",\n'
     '  "findings": [\n'
     "    {\n"
     '      "type": "Low Contrast | Color Only Information | Missing Text Alternative | Insufficient Non-Text Contrast",\n'
@@ -409,11 +444,46 @@ _ACCESSIBILITY_SYSTEM_PROMPT = (
     '      "location": "Top-left, center, etc."\n'
     "    }\n"
     "  ],\n"
-    '  "summary": "Overall assessment from your perspective",\n'
+    '  "summary": "1-2 sentence overall assessment from this CVD perspective.",\n'
     '  "passes": true/false\n'
     "}\n"
-    "Return ONLY valid JSON -- no markdown fences, no commentary."
 )
+
+
+def _validate_vlm_result(result: dict) -> dict:
+    """Enforce the expected VLM response schema.
+
+    Raises ValueError if required fields are missing or have wrong types.
+    """
+    if "perception_summary" not in result:
+        raise ValueError('missing field: "perception_summary"')
+    if not isinstance(result["perception_summary"], str):
+        raise ValueError('"perception_summary" must be a string')
+
+    if "findings" not in result:
+        raise ValueError('missing field: "findings"')
+    if not isinstance(result["findings"], list):
+        raise ValueError('"findings" must be an array')
+
+    allowed_finding_fields = {"type", "wcag_criterion", "description", "severity", "location", "cvd_perspective"}
+    for idx, finding in enumerate(result["findings"]):
+        if not isinstance(finding, dict):
+            raise ValueError(f'findings[{idx}] must be an object')
+        for key in finding:
+            if key not in allowed_finding_fields:
+                raise ValueError(f'findings[{idx}] has unsupported field: {key}')
+
+    if "summary" not in result:
+        raise ValueError('missing field: "summary"')
+    if not isinstance(result["summary"], str):
+        raise ValueError('"summary" must be a string')
+
+    if "passes" not in result:
+        raise ValueError('missing field: "passes"')
+    if not isinstance(result["passes"], bool):
+        raise ValueError('"passes" must be a boolean')
+
+    return result
 
 
 def _call_minicpm_endpoint(image_bytes: bytes, system_prompt: str) -> dict:
@@ -445,9 +515,20 @@ def _call_minicpm_endpoint(image_bytes: bytes, system_prompt: str) -> dict:
         raw = "\n".join(lines[1:-1])
 
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
     except json.JSONDecodeError:
         return {"error": f"MiniCPM returned non-JSON: {raw[:500]}", "findings": [], "passes": False}
+
+    normalized = {
+        "perception_summary": result.get("perception_summary") or "",
+        "findings": result.get("findings", []),
+        "summary": result.get("summary", ""),
+        "passes": result.get("passes", False),
+    }
+    try:
+        return _validate_vlm_result(normalized)
+    except ValueError as exc:
+        return {"error": f"Invalid VLM JSON schema: {exc}", "findings": [], "passes": False}
 
 
 def _merge_cvd_results(results: dict[str, dict]) -> dict:
@@ -927,9 +1008,10 @@ with gr.Blocks(
 
         comparison = '*Run Analyze to see side-by-side criterion comparison.*'
         if original_vlm is not None and cvd_results:
-            first_cvd_label = next(iter(cvd_results))
-            first_cvd_result = cvd_results[first_cvd_label]
-            comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
+            comparison = _format_cvd_perception_comparison_summary(
+                original_vlm=original_vlm,
+                cvd_results=cvd_results,
+            )
 
         # Return: status, card_reports (9), original_vlm, cvd_results, comparison
         return ["*Done — see reports above*"] + card_reports + [original_vlm, cvd_results, comparison]
