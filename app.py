@@ -45,6 +45,16 @@ deficiency_config = {
     'tritanomaly':       {'simulator': tritan_simulator, 'severity': 0.4, 'deficiency': simulate.Deficiency.TRITAN},
 }
 
+# -- Example image pre-loading (cache to disk reads once at import time) -----
+_EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "examples")
+_EXAMPLE_IMAGES: dict[str, bytes] = {}
+_EXAMPLE_FILENAMES = ["UR.webp", "amongos.webp", "form_validation.png", "online_users.webp"]
+for _fname in _EXAMPLE_FILENAMES:
+    _fpath = os.path.join(_EXAMPLES_DIR, _fname)
+    if os.path.isfile(_fpath):
+        with open(_fpath, "rb") as _f:
+            _EXAMPLE_IMAGES[_fname] = _f.read()
+
 SUPPORTED_MODEL = "minicpm-v-4.6"
 _MODAL_INFERENCE_URL = os.environ.get('MODAL_INFERENCE_URL')
 
@@ -876,6 +886,19 @@ with gr.Blocks(
         empty_comparison = '*Run Analyze to see side-by-side criterion comparison.*'
         return [gallery, gallery, gr.update(visible=True)] + card_images + card_reports + [empty_comparison]
 
+    def handle_example_click(example_key: str):
+        """Load a pre-cached example image — zero file I/O at click time.
+
+        Accepts a key from _EXAMPLE_IMAGES (e.g. 'UR.webp') and delegates to
+        handle_file_upload with the pre-loaded bytes.
+        """
+        file_bytes = _EXAMPLE_IMAGES.get(example_key)
+        if file_bytes is None:
+            empty_gallery = []
+            empty_values = [None] * 9 + [''] * 9
+            return [empty_gallery, empty_gallery, gr.update(visible=True)] + empty_values + [f'*Example {example_key} not found*']
+        return handle_file_upload(file_bytes)
+
     def run_vlm_analysis(cvd_grid_state, progress=gr.Progress()):
         """On Analyze click: run VLM on the pre-generated CVD grid with caching."""
         if not cvd_grid_state:
@@ -917,11 +940,27 @@ with gr.Blocks(
             )
 
         # Return: status, card_reports (9), original_vlm, cvd_results, comparison
-        return ["*Done — see reports above*"] + card_reports + [original_vlm, cvd_results, comparison]
+        upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
 
-    # File upload triggers gallery generation and card population immediately (no VLM)
-    # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
-    # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
+        # 2b. Clickable example screenshot row (pre-loaded, zero file I/O)
+        with gr.Row():
+            gr.Markdown('**Or click an example screenshot to load it instantly:**', scale=1)
+        with gr.Row():
+            for _fname in _EXAMPLE_FILENAMES:
+                if _fname in _EXAMPLE_IMAGES:
+                    _btn = gr.Button(
+                        value=f"📷 {_fname}",
+                        scale=1,
+                        min_width=140,
+                    )
+                    _btn.click(
+                        fn=lambda key=_fname: handle_example_click(key),
+                        outputs=upload_outputs,
+                    )
+
+        # File upload triggers gallery generation and card population immediately (no VLM)
+        # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
+        # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
     upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
     file_input.change(
         fn=handle_file_upload,
