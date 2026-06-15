@@ -8,6 +8,11 @@ sdk_version: "6.17.3"
 app_file: app.py
 python_version: "3.12"
 dependencies: requirements.txt
+tags:
+  - track:backyard
+  - sponsor:openbmb
+  - sponsor:modal
+  - achievement:offgrid
 ---
 
 # Color-UX-Access
