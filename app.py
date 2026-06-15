@@ -9,6 +9,8 @@ All UI changes must be implemented via Gradio components and event handlers.
 import os
 import io
 import json
+import threading
+import concurrent.futures
 
 import gradio as gr
 from PIL import Image
@@ -68,6 +70,24 @@ def image_to_bytes(img: Image.Image, fmt: str = 'PNG') -> bytes:
     buf = io.BytesIO()
     img.save(buf, format=fmt)
     return buf.getvalue()
+
+
+def _resize_for_vlm(img: Image.Image, max_side: int = 1024) -> Image.Image:
+    """Downscale image so the longest side is at most max_side pixels.
+
+    Keeps aspect ratio. Reduces base64 payload size ~3× for typical 1920×1080
+    screenshots without degrading VLM accessibility assessment quality.
+    """
+    w, h = img.size
+    if w <= max_side and h <= max_side:
+        return img
+    if w >= h:
+        new_w = max_side
+        new_h = int(h * max_side / w)
+    else:
+        new_h = max_side
+        new_w = int(w * max_side / h)
+    return img.resize((new_w, new_h), Image.LANCZOS)
 
 
 def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]:
@@ -486,6 +506,12 @@ def _get_merged_cache_key(original_img: Image.Image) -> str:
 
 
 def analyze_single_perspective(img: Image.Image, label: str) -> dict:
+    """Analyze a single CVD perspective via VLM with caching.
+
+    Resizes images to 1024px max side before transmission
+    to reduce latency without sacrificing assessment quality.
+    """
+    img = _resize_for_vlm(img)
     cache_key = _get_cache_key(img, label)
     if cache_key in _vlm_cache:
         cached = _vlm_cache[cache_key].copy()
@@ -529,14 +555,44 @@ def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
         # Stale error in cache — remove and retry
         del _vlm_merged_cache[merged_cache_key]
 
-    # Not cached - run full analysis with per-perspective caching
+    # Not cached - run full analysis with parallel VLM calls
     results = {}
-    for i, (img, label) in enumerate(cvd_grid):
+
+    # Check per-perspective cache to avoid redundant calls
+    uncached: list[tuple] = []
+    for img, label in cvd_grid:
+        cache_key = _get_cache_key(img, label)
+        if cache_key in _vlm_cache:
+            cached = _vlm_cache[cache_key].copy()
+            cached['cvd_label'] = label
+            results[label] = cached
+        else:
+            uncached.append((img, label))
+
+    if uncached:
         if progress:
-            progress(0.1 + (0.7 * i / len(cvd_grid)), desc=f"Analyzing {label} ({i+1}/{len(cvd_grid)})...")
-        # Use analyze_single_perspective which has its own cache
-        result = analyze_single_perspective(img, label)
-        results[label] = result
+            progress(0.1, desc=f"Analyzing {len(uncached)}/{len(cvd_grid)} perspectives in parallel...")
+
+        progress_lock = threading.Lock()
+        completed = [0]
+
+        def _analyze_and_progress(img, label):
+            result = analyze_single_perspective(img, label)
+            with progress_lock:
+                completed[0] += 1
+                if progress:
+                    pct = 0.1 + (0.7 * completed[0] / len(cvd_grid))
+                    progress(pct, desc=f"Analyzed {label} ({completed[0]}/{len(cvd_grid)})")
+            return label, result
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(uncached)) as pool:
+            futures = [pool.submit(_analyze_and_progress, img, label) for img, label in uncached]
+            for future in concurrent.futures.as_completed(futures):
+                label, result = future.result()
+                results[label] = result
+    else:
+        if progress:
+            progress(0.8, desc="All perspectives loaded from cache")
 
     merged = _merge_cvd_results(results)
     # Don't cache merged results that contain errors — next click should retry
