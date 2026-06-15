@@ -8,7 +8,7 @@ sdk_version: 6.0.0
 app_file: app.py
 python_version: "3.12"
 hardware: t4-small
-dependencies: requirements_space.txt
+dependencies: requirements.txt
 ---
 
 # Color-UX-Access
