@@ -9,7 +9,7 @@ A Gradio app that tests any webpage screenshot for colorblind accessibility issu
 **Pipeline:** screenshot → 10-type CVD simulation (DaltonLens) → VLM WCAG 2.1 audit → report.
 
 - **Entry point:** `app.py` (root) — single file, Gradio 5/6 compatible.
-- **VLM:** `CohereLabs/aya-vision-32b` via Modal endpoint (GPU inference).
+- **VLM:** MiniCPM-v-4.6 (~4B params) via Modal endpoint (`MODAL_INFERENCE_URL` env var).
 - **CVD:** 10 types — deuteranopia, protanopia, tritanopia, deuteranomaly, protanomaly, tritanomaly, severe_deuteranopia, severe_protanopia, achromatopsia, achromatomaly.
 
 ## Agent Behavior & Constraints
@@ -93,12 +93,13 @@ requirements.txt    # generated (Spaces deployment)
 - `app.py` handles this at runtime via `_is_gradio6` check.
 - Theme/CSS go to `Blocks()` constructor (Gradio 5) or `launch()` (Gradio 6).
 
-### VLM backends
+### VLM backend
 
-`MODELS` dict in `app.py` supports swappable backends:
-- `aya-vision-32b` (default, Cohere prize)
-- `minicpm-v-4.6` (OpenBMB prize, ~4B params)
-- `nemotron-15b` (NVIDIA prize, unconfirmed if required)
+The app uses `_call_minicpm_endpoint` in `app.py` which POSTs to the
+Modal inference URL configured via `MODAL_INFERENCE_URL`.
+The model served on Modal is MiniCPM-v-4.6 (~4B params).
+There is no swappable-model dict — the endpoint model is configured
+on the Modal side.
 
 ## Important Rules
 
