@@ -1,6 +1,7 @@
 """
-Tests for WCAG side-by-side comparison panel — paired results component
-comparing original vs CVD perspective per WCAG criterion.
+Tests for CVD perception comparison summary — the heuristic comparison table
+comparing original vs all CVD perspectives with perception_summary and pass/fail.
+Replaces the old format_wcag_comparison tests (function was dead code).
 """
 import sys
 import pathlib
@@ -10,218 +11,246 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 import pytest
-from app import format_wcag_report, format_wcag_comparison
+from app import _format_cvd_perception_comparison_summary
 
 
-class TestWCAGComparison:
-    """Tests for the side-by-side WCAG comparison panel."""
+class TestPerceptionComparisonSummary:
+    """Tests for the CVD perception comparison summary table."""
 
-    def test_format_wcag_comparison_exists(self):
-        """format_wcag_comparison function should exist in app module."""
-        import app as app_module
-        assert hasattr(app_module, 'format_wcag_comparison'), \
-            "app module should have format_wcag_comparison function"
+    def test_function_exists(self):
+        """The comparison function should exist and be callable."""
+        assert callable(_format_cvd_perception_comparison_summary)
 
-    def test_comparison_shows_original_and_cvd_side_by_side(self):
-        """Comparison should show original and CVD results for each criterion."""
-        original_result = {
+    def test_original_and_cvd_perspectives_shown(self):
+        """Table should include original design column and each CVD perspective."""
+        original_vlm = {
+            "perception_summary": "Clear and readable with normal vision.",
             "passes": True,
-            "findings": [
-                {
+        }
+        cvd_results = {
+            "Protanopia (red-blind)": {
+                "perception_summary": "Red elements are hard to distinguish.",
+                "passes": False,
+            },
+            "Deuteranopia (green-blind)": {
+                "perception_summary": "Green elements blend into background.",
+                "passes": False,
+            },
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=original_vlm,
+            cvd_results=cvd_results,
+        )
+
+        assert "Original design" in output
+        assert "Protanopia (red-blind)" in output
+        assert "Deuteranopia (green-blind)" in output
+
+    def test_perception_summary_and_pass_status_in_table(self):
+        """Each row shows perception_summary text and pass/fail indicator."""
+        original_vlm = {
+            "perception_summary": "Everything looks fine.",
+            "passes": True,
+        }
+        cvd_results = {
+            "Protanopia (red-blind)": {
+                "perception_summary": "Red buttons are invisible.",
+                "passes": False,
+            },
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=original_vlm,
+            cvd_results=cvd_results,
+        )
+
+        assert "Everything looks fine." in output
+        assert "Red buttons are invisible." in output
+        assert "✅" in output
+        assert "❌" in output
+
+    def test_heuristic_disclaimer_present(self):
+        """The output should contain a disclaimer that this is not a full WCAG audit."""
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm={"perception_summary": "OK.", "passes": True},
+            cvd_results={"Test": {"perception_summary": "Bad.", "passes": False}},
+        )
+
+        assert "heuristic" in output.lower()
+        assert "not a substitute" in output.lower()
+        assert "WCAG" in output or "audit" in output.lower()
+
+    def test_all_pass_shows_heuristic_pass(self):
+        """When all perspectives pass, overall should say heuristic pass."""
+        original_vlm = {"perception_summary": "OK.", "passes": True}
+        cvd_results = {
+            "Protanopia": {"perception_summary": "OK too.", "passes": True},
+            "Deuteranopia": {"perception_summary": "Also OK.", "passes": True},
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=original_vlm,
+            cvd_results=cvd_results,
+        )
+
+        assert "Heuristic pass" in output
+
+    def test_any_fail_shows_heuristic_fail(self):
+        """When any perspective fails, overall should say heuristic fail."""
+        original_vlm = {"perception_summary": "OK.", "passes": True}
+        cvd_results = {
+            "Protanopia": {"perception_summary": "Bad.", "passes": False},
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=original_vlm,
+            cvd_results=cvd_results,
+        )
+
+        assert "Heuristic fail" in output
+
+    def test_empty_perception_summary_uses_dash(self):
+        """Missing or empty perception_summary should display an em dash."""
+        original_vlm = {"perception_summary": "", "passes": True}
+        cvd_results = {
+            "Test": {"perception_summary": None, "passes": False},
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=original_vlm,
+            cvd_results=cvd_results,
+        )
+
+        assert "—" in output
+
+    def test_no_original_vlm_skips_original_row(self):
+        """When original_vlm is None, no 'Original design' row should appear."""
+        cvd_results = {
+            "Protanopia": {"perception_summary": "Bad.", "passes": False},
+        }
+
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm=None,
+            cvd_results=cvd_results,
+        )
+
+        assert "Original design" not in output
+        assert "Protanopia" in output
+
+    def test_markdown_table_structure(self):
+        """Output should have markdown table headers and separator."""
+        output = _format_cvd_perception_comparison_summary(
+            original_vlm={"perception_summary": "OK.", "passes": True},
+            cvd_results={"Test": {"perception_summary": "Bad.", "passes": False}},
+        )
+
+        assert "| Perspective |" in output
+        assert "VLM perception |" in output
+        assert "Pass |" in output
+        assert "|-------------|" in output
+
+
+class TestMergeCvdResults:
+    """Tests for the VLM result merging and deduplication logic."""
+
+    def test_merge_preserves_all_findings(self):
+        """All findings from each CVD perspective should appear in merged output."""
+        from app import _merge_cvd_results
+
+        results = {
+            "Protanopia": {
+                "passes": False,
+                "findings": [{
                     "type": "Low Contrast",
                     "wcag_criterion": "1.4.3",
                     "severity": "serious",
-                    "description": "Text contrast ratio 3.5:1",
-                    "location": "Body text",
-                }
-            ],
-            "summary": "1 issue found",
-        }
-        cvd_result = {
-            "passes": False,
-            "findings": [
-                {
-                    "type": "Low Contrast",
-                    "wcag_criterion": "1.4.3",
-                    "severity": "critical",
-                    "description": "Text contrast ratio 2.1:1 under protanopia",
-                    "location": "Body text",
-                }
-            ],
-            "summary": "1 critical issue found",
-        }
-
-        comparison = format_wcag_comparison(original_result, cvd_result, "Protanopia (red-blind)")
-        
-        # Should contain both original and CVD results
-        assert "Original" in comparison or "original" in comparison.lower()
-        assert "Protanopia" in comparison or "CVD" in comparison
-        # Should show criterion 1.4.3
-        assert "1.4.3" in comparison
-        # Should show severity difference (serious → critical)
-        assert "serious" in comparison.lower()
-        assert "critical" in comparison.lower()
-
-    def test_comparison_highlights_regression_pass_to_fail(self):
-        """Pass→fail regression should be highlighted in red."""
-        original_result = {
-            "passes": True,
-            "findings": [
-                {
-                    "type": "Low Contrast",
-                    "wcag_criterion": "1.4.3",
-                    "severity": "moderate",
-                    "description": "OK contrast",
-                    "location": "Body text",
-                }
-            ],
-            "summary": "Pass",
-        }
-        cvd_result = {
-            "passes": False,
-            "findings": [
-                {
-                    "type": "Low Contrast",
-                    "wcag_criterion": "1.4.3",
-                    "severity": "serious",
-                    "description": "Failed contrast",
-                    "location": "Body text",
-                }
-            ],
-            "summary": "Fail",
-        }
-
-        comparison = format_wcag_comparison(original_result, cvd_result, "Protanopia")
-        
-        # Should indicate regression (pass → fail)
-        # Look for red highlighting or regression indicator
-        assert any(marker in comparison.lower() for marker in ['regression', '❌', 'fail', 'red', '⬇', '↘']), \
-            "Should show regression indicator"
-
-    def test_comparison_highlights_improvement_fail_to_pass(self):
-        """Fail→pass improvement should be highlighted in green."""
-        original_result = {
-            "passes": False,
-            "findings": [
-                {
+                    "description": "Button contrast too low",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
+            "Deuteranopia": {
+                "passes": False,
+                "findings": [{
                     "type": "Color Only Information",
                     "wcag_criterion": "1.4.1",
+                    "severity": "critical",
+                    "description": "Green/red status indicators",
+                    "location": "Status panel",
+                }],
+                "summary": "1 issue",
+            },
+        }
+
+        merged = _merge_cvd_results(results)
+        assert len(merged["findings"]) == 2
+        assert "Button contrast too low" in [f["description"] for f in merged["findings"]]
+        assert "Green/red status indicators" in [f["description"] for f in merged["findings"]]
+
+    def test_merge_deduplicates_same_finding(self):
+        """Duplicated findings across CVD perspectives should only appear once."""
+        from app import _merge_cvd_results
+
+        results = {
+            "Protanopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
                     "severity": "serious",
-                    "description": "Color-only info",
-                    "location": "Status indicator",
-                }
-            ],
-            "summary": "Fail",
-        }
-        cvd_result = {
-            "passes": True,
-            "findings": [],
-            "summary": "Pass",
-        }
-
-        comparison = format_wcag_comparison(original_result, cvd_result, "Deuteranopia")
-        
-        # Should indicate improvement (fail → pass)
-        assert any(marker in comparison.lower() for marker in ['improvement', '✅', 'pass', 'green', '⬆', '↗']), \
-            "Should show improvement indicator"
-
-    def test_comparison_shows_all_original_criteria(self):
-        """All criteria from original evaluation should appear in comparison."""
-        original_result = {
-            "passes": False,
-            "findings": [
-                {"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "serious", "description": "Low contrast", "location": "Body"},
-                {"type": "Color Only Information", "wcag_criterion": "1.4.1", "severity": "critical", "description": "Color only", "location": "Header"},
-                {"type": "Insufficient Non-Text Contrast", "wcag_criterion": "1.4.11", "severity": "moderate", "description": "Non-text contrast", "location": "Button"},
-            ],
-            "summary": "3 issues",
-        }
-        cvd_result = {
-            "passes": False,
-            "findings": [
-                {"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "critical", "description": "Worse contrast", "location": "Body"},
-            ],
-            "summary": "1 issue",
+                    "description": "Button contrast ratio is 2.8:1",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
+            "Deuteranopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "serious",
+                    "description": "Button contrast ratio is 2.8:1",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
         }
 
-        comparison = format_wcag_comparison(original_result, cvd_result, "Tritanopia")
-        
-        # All 3 original criteria should appear
-        assert "1.4.3" in comparison
-        assert "1.4.1" in comparison
-        assert "1.4.11" in comparison
+        merged = _merge_cvd_results(results)
+        # Same description (first 80 chars) should be deduplicated
+        assert len(merged["findings"]) == 1
 
-    def test_comparison_handles_both_pass(self):
-        """Both original and CVD pass should show as pass."""
-        original_result = {"passes": True, "findings": [], "summary": "Pass"}
-        cvd_result = {"passes": True, "findings": [], "summary": "Pass"}
+    def test_merge_overall_pass_only_when_all_pass(self):
+        """Merged passes should only be True when all perspectives pass."""
+        from app import _merge_cvd_results
 
-        comparison = format_wcag_comparison(original_result, cvd_result, "Protanomaly")
-        
-        # Should show both pass
-        assert "Pass" in comparison or "✅" in comparison
+        # All pass
+        all_pass = _merge_cvd_results({
+            "A": {"passes": True, "findings": [], "summary": ""},
+            "B": {"passes": True, "findings": [], "summary": ""},
+        })
+        assert all_pass["passes"] is True
 
-    def test_comparison_handles_error_results(self):
-        """Error in either result should be handled gracefully."""
-        original_result = {"error": "VLM timeout"}
-        cvd_result = {"passes": True, "findings": [], "summary": "Pass"}
+        # One fails
+        one_fail = _merge_cvd_results({
+            "A": {"passes": True, "findings": [], "summary": ""},
+            "B": {"passes": False, "findings": [{"type": "Bad", "wcag_criterion": "1.4.1",
+                                                  "description": "x", "severity": "critical", "location": "x"}], "summary": ""},
+        })
+        assert one_fail["passes"] is False
 
-        comparison = format_wcag_comparison(original_result, cvd_result, "Protanopia")
-        
-        assert "Error" in comparison or "error" in comparison.lower()
+    def test_merge_handles_error_results(self):
+        """CVD results with errors should be skipped, not crash."""
+        from app import _merge_cvd_results
 
-    def test_comparison_includes_criterion_badges(self):
-        """Each criterion should have a color-coded badge (text/non-text, AA/AAA)."""
-        original_result = {
-            "passes": False,
-            "findings": [
-                {"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "serious", "description": "Text contrast", "location": "Body"},
-                {"type": "Insufficient Non-Text Contrast", "wcag_criterion": "1.4.11", "severity": "moderate", "description": "UI contrast", "location": "Button"},
-            ],
-            "summary": "2 issues",
-        }
-        cvd_result = {
-            "passes": False,
-            "findings": [
-                {"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "critical", "description": "Worse text contrast", "location": "Body"},
-                {"type": "Insufficient Non-Text Contrast", "wcag_criterion": "1.4.11", "severity": "serious", "description": "Worse UI contrast", "location": "Button"},
-            ],
-            "summary": "2 issues",
-        }
-
-        comparison = format_wcag_comparison(original_result, cvd_result, "Deuteranopia")
-        
-        # Should distinguish text vs non-text criteria
-        # 1.4.3 is text contrast (AA), 1.4.11 is non-text (AA)
-        assert "1.4.3" in comparison
-        assert "1.4.11" in comparison
-
-    def test_comparison_updates_on_variant_change(self):
-        """Comparison should be regenerated when CVD variant changes (tested via function interface)."""
-        original_result = {
-            "passes": True,
-            "findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "moderate", "description": "OK", "location": "Body"}],
-            "summary": "Pass",
-        }
-        cvd_result_1 = {
-            "passes": False,
-            "findings": [{"type": "Low Contrast", "wcag_criterion": "1.4.3", "severity": "serious", "description": "Failed", "location": "Body"}],
-            "summary": "Fail",
-        }
-        cvd_result_2 = {
-            "passes": True,
-            "findings": [],
-            "summary": "Pass",
-        }
-
-        comp_1 = format_wcag_comparison(original_result, cvd_result_1, "Protanopia")
-        comp_2 = format_wcag_comparison(original_result, cvd_result_2, "Tritanopia")
-        
-        # Different CVD results should produce different comparisons
-        assert comp_1 != comp_2
-        # First should show regression, second should show pass
-        assert "1.4.3" in comp_1
-        assert "1.4.3" in comp_2
+        merged = _merge_cvd_results({
+            "Protanopia": {"error": "VLM timeout", "findings": [], "passes": False},
+            "Deuteranopia": {"passes": True, "findings": [], "summary": "OK"},
+        })
+        assert merged["passes"] is True
+        assert len(merged["findings"]) == 0
+        assert "VLM timeout" in merged.get("summary", "")
 
 
 if __name__ == '__main__':
