@@ -151,5 +151,107 @@ class TestPerceptionComparisonSummary:
         assert "|-------------|" in output
 
 
+class TestMergeCvdResults:
+    """Tests for the VLM result merging and deduplication logic."""
+
+    def test_merge_preserves_all_findings(self):
+        """All findings from each CVD perspective should appear in merged output."""
+        from app import _merge_cvd_results
+
+        results = {
+            "Protanopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "serious",
+                    "description": "Button contrast too low",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
+            "Deuteranopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Color Only Information",
+                    "wcag_criterion": "1.4.1",
+                    "severity": "critical",
+                    "description": "Green/red status indicators",
+                    "location": "Status panel",
+                }],
+                "summary": "1 issue",
+            },
+        }
+
+        merged = _merge_cvd_results(results)
+        assert len(merged["findings"]) == 2
+        assert "Button contrast too low" in [f["description"] for f in merged["findings"]]
+        assert "Green/red status indicators" in [f["description"] for f in merged["findings"]]
+
+    def test_merge_deduplicates_same_finding(self):
+        """Duplicated findings across CVD perspectives should only appear once."""
+        from app import _merge_cvd_results
+
+        results = {
+            "Protanopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "serious",
+                    "description": "Button contrast ratio is 2.8:1",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
+            "Deuteranopia": {
+                "passes": False,
+                "findings": [{
+                    "type": "Low Contrast",
+                    "wcag_criterion": "1.4.3",
+                    "severity": "serious",
+                    "description": "Button contrast ratio is 2.8:1",
+                    "location": "Submit button",
+                }],
+                "summary": "1 issue",
+            },
+        }
+
+        merged = _merge_cvd_results(results)
+        # Same description (first 80 chars) should be deduplicated
+        assert len(merged["findings"]) == 1
+
+    def test_merge_overall_pass_only_when_all_pass(self):
+        """Merged passes should only be True when all perspectives pass."""
+        from app import _merge_cvd_results
+
+        # All pass
+        all_pass = _merge_cvd_results({
+            "A": {"passes": True, "findings": [], "summary": ""},
+            "B": {"passes": True, "findings": [], "summary": ""},
+        })
+        assert all_pass["passes"] is True
+
+        # One fails
+        one_fail = _merge_cvd_results({
+            "A": {"passes": True, "findings": [], "summary": ""},
+            "B": {"passes": False, "findings": [{"type": "Bad", "wcag_criterion": "1.4.1",
+                                                  "description": "x", "severity": "critical", "location": "x"}], "summary": ""},
+        })
+        assert one_fail["passes"] is False
+
+    def test_merge_handles_error_results(self):
+        """CVD results with errors should be skipped, not crash."""
+        from app import _merge_cvd_results
+
+        merged = _merge_cvd_results({
+            "Protanopia": {"error": "VLM timeout", "findings": [], "passes": False},
+            "Deuteranopia": {"passes": True, "findings": [], "summary": "OK"},
+        })
+        assert merged["passes"] is True
+        assert len(merged["findings"]) == 0
+        assert "VLM timeout" in merged.get("summary", "")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
