@@ -144,3 +144,25 @@ uv pip install -e ".[dev]"     # + playwright, pytest
 uv pip install -e ".[space]"   # + gradio, spaces, torch (for HF Space)
 uv pip install -e ".[all]"     # everything
 ```
+
+## Examples
+VLM should come to similar conclusions than the sources.  
+
+## form_validation.png
+Errors being conveyed using color: 
+Another common scenario is when errors are identified on a page. Any page that has form fields is enabled with a validation mechanism to see if the form field input has the information to meet the form’s requirements. When that doesn’t happen, the form fields must display the errors so that the user is given the context and information to correct the error and submit the form.
+[source](https://deque.com)
+
+## amongos.jpg
+The standard palette is fundamentally unplayable without the color-blind mode, as critical distinctions like red/green, blue/purple, and cyan/white vanish under their specific vision conditions. The ultimate takeaway is that without inclusive design features like the available color-blind mode, the game’s core social deduction mechanics fail for a substantial portion of its global audience.
+[source](https://uxdesign.cc/the-importance-of-colorblind-friendly-design-case-study-among-us-dcd042c87b9)
+
+
+## online_users.webp
+If color is the only thing changing, it’s inaccessible. These indicators look the same to many colorblind people, making them virtually useless.
+[source](https://medium.com/queer-design-club/going-beyond-color-9d3830559e10)
+
+## Resources
+https://www.smashingmagazine.com/2024/02/designing-for-colorblindness/
+
+

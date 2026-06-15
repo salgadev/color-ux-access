@@ -132,14 +132,20 @@ def format_wcag_report(vlm_result: dict) -> str:
     else:
         report = "## WCAG Accessibility Report\n\n"
 
+    perception_summary = (vlm_result.get('perception_summary') or '').strip()
+    if perception_summary:
+        report += f"### VLM perception\n{perception_summary}\n\n"
+
+    report += "### WCAG-style assessment\n\n"
+
     findings = vlm_result.get('findings', [])
     if not findings:
-        if vlm_result.get('passes', False):
-            return report + "Pass -- No accessibility issues detected."
-        return report + "No accessibility issues detected."
+        status = 'Pass' if vlm_result.get('passes', False) else 'Fail'
+        report += f"**Overall:** {status} — No accessibility issues detected.\n"
+        return report
 
     report += f"**Overall:** {'Pass' if vlm_result.get('passes', False) else 'Fail'}\n\n"
-    severity_icons = {'critical': ':red_circle:', 'serious': ':orange_circle:', 'moderate': ':yellow_circle:'}
+    severity_icons = {'critical': '🔴', 'serious': '🟠', 'moderate': '🟡'}
     wcag_links = {
         '1.1.1':  'https://www.w3.org/WAI/WCAG21/Understanding/non-text-content',
         '1.4.1':  'https://www.w3.org/WAI/WCAG21/Understanding/use-of-color',
@@ -148,7 +154,7 @@ def format_wcag_report(vlm_result: dict) -> str:
     }
 
     for i, f in enumerate(findings, 1):
-        icon = severity_icons.get(f.get('severity', 'moderate'))
+        icon = severity_icons.get(f.get('severity', 'moderate'), '🟡')
         wcag = f.get('wcag_criterion', 'N/A')
         link = wcag_links.get(wcag, '#')
         cvd_perspective = f.get('cvd_perspective', '')
@@ -166,166 +172,29 @@ def format_wcag_report(vlm_result: dict) -> str:
     return report
 
 
-def format_wcag_comparison(
-    original_result: dict,
-    cvd_result: dict,
-    cvd_label: str
+def _format_cvd_perception_comparison_summary(
+    original_vlm: dict | None,
+    cvd_results: dict[str, dict],
 ) -> str:
-    """
-    Generate a side-by-side comparison of WCAG evaluations.
+    """Heuristic comparison of VLM perception summaries and pass states."""
+    lines = ["## Color-vision comparison (heuristic)\n\n", "| Perspective | VLM perception | Pass |\n", "|-------------|----------------|------|\n"]
 
-    Shows each WCAG criterion with original (left) and CVD (right) results,
-    with color-coded badges and regression/improvement highlighting.
-    """
-    # Handle error cases
-    if 'error' in original_result:
-        return f"**Error (Original):** {original_result['error']}"
-    if 'error' in cvd_result:
-        return f"**Error ({cvd_label}):** {cvd_result['error']}"
+    entries: list[tuple[str, dict]] = []
+    if original_vlm is not None:
+        entries.append(("Original design", original_vlm))
+    for label, result in cvd_results.items():
+        entries.append((label, result))
 
-    # Extract findings grouped by WCAG criterion
-    def group_by_criterion(findings: list) -> dict:
-        """Group findings by WCAG criterion."""
-        grouped = {}
-        for f in findings:
-            wcag = f.get('wcag_criterion', 'N/A')
-            if wcag not in grouped:
-                grouped[wcag] = []
-            grouped[wcag].append(f)
-        return grouped
+    for label, result in entries:
+        perception = (result.get("perception_summary", "") or "").strip()
+        if not perception:
+            perception = "—"
+        passes = "✅ Pass" if result.get("passes", False) else "❌ Fail"
+        lines.append(f"| {label} | {perception} | {passes} |\n")
 
-    orig_findings = original_result.get('findings', [])
-    cvd_findings = cvd_result.get('findings', [])
-
-    orig_by_criterion = group_by_criterion(orig_findings)
-    cvd_by_criterion = group_by_criterion(cvd_findings)
-
-    # Get all unique criteria from both
-    all_criteria = set(orig_by_criterion.keys()) | set(cvd_by_criterion.keys())
-    if not all_criteria:
-        # No findings in either
-        orig_passes = original_result.get('passes', True)
-        cvd_passes = cvd_result.get('passes', True)
-        return _format_comparison_no_findings(orig_passes, cvd_passes, cvd_label)
-
-    # WCAG criterion metadata
-    criterion_info = {
-        '1.1.1': {'name': 'Non-text Content', 'type': 'non-text', 'level': 'A'},
-        '1.4.1': {'name': 'Use of Color', 'type': 'non-text', 'level': 'A'},
-        '1.4.3': {'name': 'Contrast (Minimum)', 'type': 'text', 'level': 'AA'},
-        '1.4.11': {'name': 'Non-text Contrast', 'type': 'non-text', 'level': 'AA'},
-    }
-
-    # Build comparison report
-    report = f"## WCAG Comparison: Original vs {cvd_label}\n\n"
-    report += "| Criterion | Type | Level | Original | CVD |\n"
-    report += "|-----------|------|-------|----------|-----|\n"
-
-    for criterion in sorted(all_criteria):
-        info = criterion_info.get(criterion, {'name': 'Unknown', 'type': 'unknown', 'level': '?'})
-        orig_list = orig_by_criterion.get(criterion, [])
-        cvd_list = cvd_by_criterion.get(criterion, [])
-
-        # Determine status for each side
-        orig_status, orig_severity = _get_criterion_status(orig_list)
-        cvd_status, cvd_severity = _get_criterion_status(cvd_list)
-
-        # Determine change type
-        change_indicator = _get_change_indicator(orig_status, cvd_status, orig_severity, cvd_severity)
-
-        # Format badge
-        orig_badge = _format_badge(orig_status, orig_severity, 'original')
-        cvd_badge = _format_badge(cvd_status, cvd_severity, 'cvd')
-
-        type_badge = _format_type_badge(info['type'])
-        level_badge = _format_level_badge(info['level'])
-
-        report += f"| **{criterion}** {info['name']} | {type_badge} | {level_badge} | {orig_badge} | {cvd_badge} {change_indicator} |\n"
-
-    # Add summary
-    orig_passes = original_result.get('passes', True)
-    cvd_passes = cvd_result.get('passes', True)
-    report += f"\n**Overall Original:** {'✅ Pass' if orig_passes else '❌ Fail'}  \n"
-    report += f"**Overall {cvd_label}:** {'✅ Pass' if cvd_passes else '❌ Fail'}  \n"
-
-    if original_result.get('summary'):
-        report += f"\n*Original: {original_result['summary']}*  \n"
-    if cvd_result.get('summary'):
-        report += f"*{cvd_label}: {cvd_result['summary']}*"
-
-    return report
-
-
-def _get_criterion_status(findings: list) -> tuple:
-    """Get pass/fail status and worst severity for a criterion."""
-    if not findings:
-        return 'pass', None
-    # If any finding fails, criterion fails
-    worst_severity = None
-    severity_order = {'critical': 3, 'serious': 2, 'moderate': 1, None: 0}
-    for f in findings:
-        sev = f.get('severity')
-        if worst_severity is None or severity_order.get(sev, 0) > severity_order.get(worst_severity, 0):
-            worst_severity = sev
-    return 'fail', worst_severity
-
-
-def _format_badge(status: str, severity: str | None, side: str) -> str:
-    """Format a color-coded badge for pass/fail with severity."""
-    if status == 'pass':
-        return '`✅ Pass`'
-    # Fail - show severity
-    sev_colors = {'critical': '🔴', 'serious': '🟠', 'moderate': '🟡'}
-    sev_icon = sev_colors.get(severity, '🔴')
-    return f"`{sev_icon} Fail ({severity or 'unknown'})`"
-
-
-def _format_type_badge(finding_type: str) -> str:
-    """Format badge for text vs non-text criterion type."""
-    badges = {'text': '`📝 Text`', 'non-text': '`🎨 Non-text`', 'unknown': '`? Unknown`'}
-    return badges.get(finding_type, '`? Unknown`')
-
-
-def _format_level_badge(level: str) -> str:
-    """Format badge for WCAG level (A/AA/AAA)."""
-    badges = {'A': '`🅰️ A`', 'AA': '`🅰️🅰️ AA`', 'AAA': '`🅰️🅰️🅰️ AAA`', '?': '`?`'}
-    return badges.get(level, '`?`')
-
-
-def _get_change_indicator(orig_status: str, cvd_status: str, orig_sev: str | None, cvd_sev: str | None) -> str:
-    """Determine change indicator: regression (red), improvement (green), or none."""
-    sev_order = {'critical': 3, 'serious': 2, 'moderate': 1, None: 0}
-    orig_sev_val = sev_order.get(orig_sev, 0)
-    cvd_sev_val = sev_order.get(cvd_sev, 0)
-
-    # Regression: original pass, CVD fail
-    if orig_status == 'pass' and cvd_status == 'fail':
-        return '`🔴 REGRESSION`'
-    # Improvement: original fail, CVD pass
-    if orig_status == 'fail' and cvd_status == 'pass':
-        return '`🟢 IMPROVEMENT`'
-    # Both fail - check severity change
-    if orig_status == 'fail' and cvd_status == 'fail':
-        if cvd_sev_val > orig_sev_val:
-            return '`🔴 WORSE`'
-        elif cvd_sev_val < orig_sev_val:
-            return '`🟢 BETTER`'
-        return '`➡️ SAME`'
-    # Both pass
-    return '`✅ OK`'
-
-
-def _format_comparison_no_findings(orig_passes: bool, cvd_passes: bool, cvd_label: str) -> str:
-    """Format comparison when there are no findings in either."""
-    report = f"## WCAG Comparison: Original vs {cvd_label}\n\n"
-    report += "| Criterion | Type | Level | Original | CVD |\n"
-    report += "|-----------|------|-------|----------|-----|\n"
-    report += "| *No criteria evaluated* | — | — | "
-    report += f"{'✅ Pass' if orig_passes else '❌ Fail'} | "
-    report += f"{'✅ Pass' if cvd_passes else '❌ Fail'} |\n\n"
-    report += f"**Overall Original:** {'✅ Pass' if orig_passes else '❌ Fail'}  \n"
-    report += f"**Overall {cvd_label}:** {'✅ Pass' if cvd_passes else '❌ Fail'}"
-    return report
+    all_pass = all(result.get("passes", False) for _, result in entries)
+    lines.append(f"\n**Overall:** {'Heuristic pass' if all_pass else 'Heuristic fail'} — not a substitute for full WCAG audit.")
+    return "".join(lines)
 
 
 # -- VLM Inference ------------------------------------------------------------
@@ -398,8 +267,12 @@ _VLM_CVD_PROMPTS = {
 }
 
 _ACCESSIBILITY_SYSTEM_PROMPT = (
-    "Output a JSON object with this structure:\n"
+    "You are an accessibility expert analyzing a webpage screenshot from the perspective "
+    "of a colorblind user to infer likely WCAG-style issues for that vision type only. "
+    "Respond with a single JSON object and nothing else (no markdown, no comments). "
+    "JSON shape:\n"
     "{\n"
+    '  "perception_summary": "One short sentence on how easy or hard it is to understand important information without relying on color from this CVD perspective.",\n'
     '  "findings": [\n'
     "    {\n"
     '      "type": "Low Contrast | Color Only Information | Missing Text Alternative | Insufficient Non-Text Contrast",\n'
@@ -409,11 +282,46 @@ _ACCESSIBILITY_SYSTEM_PROMPT = (
     '      "location": "Top-left, center, etc."\n'
     "    }\n"
     "  ],\n"
-    '  "summary": "Overall assessment from your perspective",\n'
+    '  "summary": "1-2 sentence overall assessment from this CVD perspective.",\n'
     '  "passes": true/false\n'
     "}\n"
-    "Return ONLY valid JSON -- no markdown fences, no commentary."
 )
+
+
+def _validate_vlm_result(result: dict) -> dict:
+    """Enforce the expected VLM response schema.
+
+    Raises ValueError if required fields are missing or have wrong types.
+    """
+    if "perception_summary" not in result:
+        raise ValueError('missing field: "perception_summary"')
+    if not isinstance(result["perception_summary"], str):
+        raise ValueError('"perception_summary" must be a string')
+
+    if "findings" not in result:
+        raise ValueError('missing field: "findings"')
+    if not isinstance(result["findings"], list):
+        raise ValueError('"findings" must be an array')
+
+    allowed_finding_fields = {"type", "wcag_criterion", "description", "severity", "location", "cvd_perspective"}
+    for idx, finding in enumerate(result["findings"]):
+        if not isinstance(finding, dict):
+            raise ValueError(f'findings[{idx}] must be an object')
+        for key in finding:
+            if key not in allowed_finding_fields:
+                raise ValueError(f'findings[{idx}] has unsupported field: {key}')
+
+    if "summary" not in result:
+        raise ValueError('missing field: "summary"')
+    if not isinstance(result["summary"], str):
+        raise ValueError('"summary" must be a string')
+
+    if "passes" not in result:
+        raise ValueError('missing field: "passes"')
+    if not isinstance(result["passes"], bool):
+        raise ValueError('"passes" must be a boolean')
+
+    return result
 
 
 def _call_minicpm_endpoint(image_bytes: bytes, system_prompt: str) -> dict:
@@ -445,9 +353,20 @@ def _call_minicpm_endpoint(image_bytes: bytes, system_prompt: str) -> dict:
         raw = "\n".join(lines[1:-1])
 
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
     except json.JSONDecodeError:
         return {"error": f"MiniCPM returned non-JSON: {raw[:500]}", "findings": [], "passes": False}
+
+    normalized = {
+        "perception_summary": result.get("perception_summary") or "",
+        "findings": result.get("findings", []),
+        "summary": result.get("summary", ""),
+        "passes": result.get("passes", False),
+    }
+    try:
+        return _validate_vlm_result(normalized)
+    except ValueError as exc:
+        return {"error": f"Invalid VLM JSON schema: {exc}", "findings": [], "passes": False}
 
 
 def _merge_cvd_results(results: dict[str, dict]) -> dict:
@@ -927,9 +846,10 @@ with gr.Blocks(
 
         comparison = '*Run Analyze to see side-by-side criterion comparison.*'
         if original_vlm is not None and cvd_results:
-            first_cvd_label = next(iter(cvd_results))
-            first_cvd_result = cvd_results[first_cvd_label]
-            comparison = format_wcag_comparison(original_vlm, first_cvd_result, first_cvd_label)
+            comparison = _format_cvd_perception_comparison_summary(
+                original_vlm=original_vlm,
+                cvd_results=cvd_results,
+            )
 
         # Return: status, card_reports (9), original_vlm, cvd_results, comparison
         return ["*Done — see reports above*"] + card_reports + [original_vlm, cvd_results, comparison]

@@ -105,6 +105,7 @@ def mock_vlm_factory():
     def mock_vlm_result(passes: bool = False, findings_count: int = 1) -> dict:
         findings = make_findings(findings_count) if not passes else []
         return {
+            "perception_summary": "The UI is mostly readable but some color-dependent elements may be hard to distinguish." if not passes else "The interface is clear and readable from this perspective.",
             "findings": findings,
             "summary": f"{findings_count} critical issue(s) found" if findings else "No issues found",
             "passes": passes,
