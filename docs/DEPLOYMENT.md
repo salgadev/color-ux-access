@@ -10,13 +10,10 @@
 
 | Service | URL | Status |
 |---------|-----|--------|
-| HF Space | `salgadev-color-ux-access.hf.space` | ⚠️ BUILD_ERROR (sdk_version mismatch) |
+| HF Space | `salgadev-color-ux-access.hf.space` | ⚠️ BUILD_ERROR (hash mismatch — fixing) |
 | Modal | `narwall-tech--color-ux-access-ui.modal.run` | ✅ LIVE (200) |
 
-**HF Space issue:** The Space was originally created with `sdk_version: 5.0.0` and `app_file: app.py`.
-README.md now has `sdk_version: 6.0.0` and `app_file: app_space.py` — these take effect on next rebuild.
-Additionally, HF Spaces infrastructure installs `gradio[oauth]==5.0.0` as a default dependency.
-`app_space.py` now has Gradio 5/6 backward compat (try/except version detection). `HF_TOKEN` secret must be added in Space Settings for VLM inference to work.
+**HF Space issue:** The Space uses `sdk_version: 6.17.3` and `app_file: app.py` in README.md. HF Spaces infrastructure auto-installs `gradio[oauth,mcp]==6.17.3` matching the SDK version. The `requirements_space.txt` (now used via `dependencies` in README) provides the remaining dependencies without pinning Gradio, avoiding hash conflicts. `HF_TOKEN` secret must be added in Space Settings for VLM inference to work.
 
 ---
 
@@ -53,10 +50,12 @@ pillow
 numpy
 daltonlens
 python-dotenv
-huggingface_hub==0.25.2   # Must be <0.26 (HfFolder removed in 0.26)
+modal>=1.4.3
+requests>=2.34.2
+colorspacious>=1.1.2
 ```
 
-> **Critical:** `huggingface_hub<0.26` is required. Gradio 5.x depends on `HfFolder` which was removed in huggingface_hub 0.26.
+> **Note:** Gradio version is determined by `sdk_version` in README.md (currently 6.17.3). The Space infrastructure auto-installs `gradio[oauth,mcp]` matching that version.
 
 ### Environment Variables
 
@@ -91,7 +90,6 @@ First inference: ~60–90s (model download + KV cache init). Subsequent: <5s (ca
 
 | Issue | Fix |
 |-------|-----|
-| `HfFolder` not found | Downgrade huggingface_hub to 0.25.2 |
 | First call timeout | Space hardware too small → upgrade to A10G |
 | Token not found | Add HF_TOKEN secret in Space Settings |
 | Space not building | Check `requirements_space.txt` syntax, no comments in pip install |

@@ -8,7 +8,7 @@ sdk_version: "6.17.3"
 app_file: app.py
 python_version: "3.12"
 hardware: t4-small
-dependencies: requirements.txt
+dependencies: requirements_space.txt
 ---
 
 # Color-UX-Access
@@ -145,5 +145,3 @@ uv pip install -e ".[dev]"     # + playwright, pytest
 uv pip install -e ".[space]"   # + gradio, spaces, torch (for HF Space)
 uv pip install -e ".[all]"     # everything
 ```
-
-**Constraint:** `huggingface_hub<0.26` required (Gradio 5 depends on HfFolder).

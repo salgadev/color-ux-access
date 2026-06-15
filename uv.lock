@@ -423,12 +423,14 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "colorspacious" },
+    { name = "daltonlens" },
     { name = "fastapi", extra = ["standard"] },
     { name = "modal" },
     { name = "openai" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "requests" },
     { name = "spaces" },
     { name = "torch" },
 ]
@@ -443,8 +445,12 @@ modal = [
     { name = "python-multipart" },
 ]
 space = [
+    { name = "colorspacious" },
+    { name = "daltonlens" },
+    { name = "modal" },
     { name = "openai" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "spaces" },
     { name = "torch" },
 ]
@@ -454,12 +460,15 @@ requires-dist = [
     { name = "color-ux-access", extras = ["dev", "space", "modal"], marker = "extra == 'all'" },
     { name = "colorspacious", specifier = ">=1.1.2" },
     { name = "colorspacious", marker = "extra == 'dev'", specifier = ">=1.1.2" },
+    { name = "colorspacious", marker = "extra == 'space'", specifier = ">=1.1.2" },
     { name = "daltonlens", specifier = ">=0.1.5" },
+    { name = "daltonlens", marker = "extra == 'space'", specifier = ">=0.1.5" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", extras = ["standard"], marker = "extra == 'modal'", specifier = ">=0.120" },
     { name = "gradio", specifier = ">=6.17.3" },
     { name = "modal", specifier = ">=1.4.3" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=0.70" },
+    { name = "modal", marker = "extra == 'space'", specifier = ">=1.4.3" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openai", specifier = ">=1.0" },
     { name = "openai", marker = "extra == 'modal'", specifier = ">=1.0" },
@@ -470,6 +479,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'space'", specifier = ">=1.0" },
     { name = "python-multipart", marker = "extra == 'modal'", specifier = ">=0.0.20" },
     { name = "requests", specifier = ">=2.34.2" },
+    { name = "requests", marker = "extra == 'space'", specifier = ">=2.34.2" },
     { name = "spaces", marker = "extra == 'space'", specifier = ">=0.8" },
     { name = "torch", marker = "extra == 'space'", specifier = ">=2.8.0" },
 ]
