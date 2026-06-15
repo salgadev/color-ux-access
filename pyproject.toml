@@ -38,9 +38,13 @@ dev = [
 ]
 space = [
     "spaces>=0.8",
-    'torch>=2.8.0',
+    "torch>=2.8.0",
     "openai>=1.0",
     "python-dotenv>=1.0",
+    "daltonlens>=0.1.5",
+    "requests>=2.34.2",
+    "colorspacious>=1.1.2",
+    "modal>=1.4.3",
 ]
 modal = [
     "modal>=0.70",
