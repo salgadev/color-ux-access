@@ -501,7 +501,9 @@ def analyze_single_perspective(img: Image.Image, label: str) -> dict:
         result = {"error": str(e), "findings": [], "passes": False}
 
     result['cvd_label'] = label
-    _vlm_cache[cache_key] = result
+    # Don't cache error results — next click should retry, not show stale error
+    if 'error' not in result:
+        _vlm_cache[cache_key] = result
     return result
 
 
@@ -517,12 +519,15 @@ def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
     original_img = cvd_grid[0][0]
     merged_cache_key = _get_merged_cache_key(original_img)
 
-    # Check merged cache first
+    # Check merged cache first — but skip if cached result has errors
     if merged_cache_key in _vlm_merged_cache:
         cached_merged = _vlm_merged_cache[merged_cache_key].copy()
-        if progress:
-            progress(1.0, desc="Loaded cached results")
-        return cached_merged
+        if 'error' not in cached_merged:
+            if progress:
+                progress(1.0, desc="Loaded cached results")
+            return cached_merged
+        # Stale error in cache — remove and retry
+        del _vlm_merged_cache[merged_cache_key]
 
     # Not cached - run full analysis with per-perspective caching
     results = {}
@@ -534,7 +539,9 @@ def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
         results[label] = result
 
     merged = _merge_cvd_results(results)
-    _vlm_merged_cache[merged_cache_key] = merged
+    # Don't cache merged results that contain errors — next click should retry
+    if 'error' not in merged:
+        _vlm_merged_cache[merged_cache_key] = merged
 
     if progress:
         progress(0.9, desc="Formatting WCAG report...")
