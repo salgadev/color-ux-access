@@ -222,7 +222,7 @@ class TestFormatWcagReportFormatting:
             "passes": True,
         }
         report = format_wcag_report(result)
-        assert "### VLM perception" in report
+        assert "👁️ VLM perception:" in report
         assert "Most text is readable" in report
         perception_pos = report.index("VLM perception")
         assessment_pos = report.index("WCAG-style assessment")
