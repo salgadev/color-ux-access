@@ -9,6 +9,8 @@ All UI changes must be implemented via Gradio components and event handlers.
 import os
 import io
 import json
+import threading
+import concurrent.futures
 
 import gradio as gr
 from PIL import Image
@@ -43,6 +45,16 @@ deficiency_config = {
     'tritanomaly':       {'simulator': tritan_simulator, 'severity': 0.4, 'deficiency': simulate.Deficiency.TRITAN},
 }
 
+# -- Example image pre-loading (cache to disk reads once at import time) -----
+_EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "examples")
+_EXAMPLE_IMAGES: dict[str, bytes] = {}
+_EXAMPLE_FILENAMES = ["UR.webp", "amongos.webp", "form_validation.png", "online_users.webp"]
+for _fname in _EXAMPLE_FILENAMES:
+    _fpath = os.path.join(_EXAMPLES_DIR, _fname)
+    if os.path.isfile(_fpath):
+        with open(_fpath, "rb") as _f:
+            _EXAMPLE_IMAGES[_fname] = _f.read()
+
 SUPPORTED_MODEL = "minicpm-v-4.6"
 _MODAL_INFERENCE_URL = os.environ.get('MODAL_INFERENCE_URL')
 
@@ -68,6 +80,24 @@ def image_to_bytes(img: Image.Image, fmt: str = 'PNG') -> bytes:
     buf = io.BytesIO()
     img.save(buf, format=fmt)
     return buf.getvalue()
+
+
+def _resize_for_vlm(img: Image.Image, max_side: int = 1024) -> Image.Image:
+    """Downscale image so the longest side is at most max_side pixels.
+
+    Keeps aspect ratio. Reduces base64 payload size ~3× for typical 1920×1080
+    screenshots without degrading VLM accessibility assessment quality.
+    """
+    w, h = img.size
+    if w <= max_side and h <= max_side:
+        return img
+    if w >= h:
+        new_w = max_side
+        new_h = int(h * max_side / w)
+    else:
+        new_h = max_side
+        new_w = int(w * max_side / h)
+    return img.resize((new_w, new_h), Image.LANCZOS)
 
 
 def generate_cvd_gallery(original: Image.Image) -> list[tuple[Image.Image, str]]:
@@ -134,7 +164,9 @@ def format_wcag_report(vlm_result: dict) -> str:
 
     perception_summary = (vlm_result.get('perception_summary') or '').strip()
     if perception_summary:
-        report += f"### VLM perception\n{perception_summary}\n\n"
+        report += f"> **👁️ VLM perception:** {perception_summary}\n\n"
+    else:
+        report += "\n"
 
     report += "### WCAG-style assessment\n\n"
 
@@ -486,6 +518,12 @@ def _get_merged_cache_key(original_img: Image.Image) -> str:
 
 
 def analyze_single_perspective(img: Image.Image, label: str) -> dict:
+    """Analyze a single CVD perspective via VLM with caching.
+
+    Resizes images to 1024px max side before transmission
+    to reduce latency without sacrificing assessment quality.
+    """
+    img = _resize_for_vlm(img)
     cache_key = _get_cache_key(img, label)
     if cache_key in _vlm_cache:
         cached = _vlm_cache[cache_key].copy()
@@ -501,7 +539,9 @@ def analyze_single_perspective(img: Image.Image, label: str) -> dict:
         result = {"error": str(e), "findings": [], "passes": False}
 
     result['cvd_label'] = label
-    _vlm_cache[cache_key] = result
+    # Don't cache error results — next click should retry, not show stale error
+    if 'error' not in result:
+        _vlm_cache[cache_key] = result
     return result
 
 
@@ -517,24 +557,59 @@ def analyze_all_perspectives_with_cache(cvd_grid: list, progress=None) -> dict:
     original_img = cvd_grid[0][0]
     merged_cache_key = _get_merged_cache_key(original_img)
 
-    # Check merged cache first
+    # Check merged cache first — but skip if cached result has errors
     if merged_cache_key in _vlm_merged_cache:
         cached_merged = _vlm_merged_cache[merged_cache_key].copy()
-        if progress:
-            progress(1.0, desc="Loaded cached results")
-        return cached_merged
+        if 'error' not in cached_merged:
+            if progress:
+                progress(1.0, desc="Loaded cached results")
+            return cached_merged
+        # Stale error in cache — remove and retry
+        del _vlm_merged_cache[merged_cache_key]
 
-    # Not cached - run full analysis with per-perspective caching
+    # Not cached - run full analysis with parallel VLM calls
     results = {}
-    for i, (img, label) in enumerate(cvd_grid):
+
+    # Check per-perspective cache to avoid redundant calls
+    uncached: list[tuple] = []
+    for img, label in cvd_grid:
+        cache_key = _get_cache_key(img, label)
+        if cache_key in _vlm_cache:
+            cached = _vlm_cache[cache_key].copy()
+            cached['cvd_label'] = label
+            results[label] = cached
+        else:
+            uncached.append((img, label))
+
+    if uncached:
         if progress:
-            progress(0.1 + (0.7 * i / len(cvd_grid)), desc=f"Analyzing {label} ({i+1}/{len(cvd_grid)})...")
-        # Use analyze_single_perspective which has its own cache
-        result = analyze_single_perspective(img, label)
-        results[label] = result
+            progress(0.1, desc=f"Analyzing {len(uncached)}/{len(cvd_grid)} perspectives in parallel...")
+
+        progress_lock = threading.Lock()
+        completed = [0]
+
+        def _analyze_and_progress(img, label):
+            result = analyze_single_perspective(img, label)
+            with progress_lock:
+                completed[0] += 1
+                if progress:
+                    pct = 0.1 + (0.7 * completed[0] / len(cvd_grid))
+                    progress(pct, desc=f"Analyzed {label} ({completed[0]}/{len(cvd_grid)})")
+            return label, result
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(uncached)) as pool:
+            futures = [pool.submit(_analyze_and_progress, img, label) for img, label in uncached]
+            for future in concurrent.futures.as_completed(futures):
+                label, result = future.result()
+                results[label] = result
+    else:
+        if progress:
+            progress(0.8, desc="All perspectives loaded from cache")
 
     merged = _merge_cvd_results(results)
-    _vlm_merged_cache[merged_cache_key] = merged
+    # Don't cache merged results that contain errors — next click should retry
+    if 'error' not in merged:
+        _vlm_merged_cache[merged_cache_key] = merged
 
     if progress:
         progress(0.9, desc="Formatting WCAG report...")
@@ -811,6 +886,19 @@ with gr.Blocks(
         empty_comparison = '*Run Analyze to see side-by-side criterion comparison.*'
         return [gallery, gallery, gr.update(visible=True)] + card_images + card_reports + [empty_comparison]
 
+    def handle_example_click(example_key: str):
+        """Load a pre-cached example image — zero file I/O at click time.
+
+        Accepts a key from _EXAMPLE_IMAGES (e.g. 'UR.webp') and delegates to
+        handle_file_upload with the pre-loaded bytes.
+        """
+        file_bytes = _EXAMPLE_IMAGES.get(example_key)
+        if file_bytes is None:
+            empty_gallery = []
+            empty_values = [None] * 9 + [''] * 9
+            return [empty_gallery, empty_gallery, gr.update(visible=True)] + empty_values + [f'*Example {example_key} not found*']
+        return handle_file_upload(file_bytes)
+
     def run_vlm_analysis(cvd_grid_state, progress=gr.Progress()):
         """On Analyze click: run VLM on the pre-generated CVD grid with caching."""
         if not cvd_grid_state:
@@ -858,6 +946,23 @@ with gr.Blocks(
     # Outputs: cvd_grid (hidden), current_cvd_grid, comparison_grid_container (visible),
     # then 9 perspective_images, 9 perspective_reports, wcag_comparison_output
     upload_outputs = [cvd_grid, current_cvd_grid, comparison_grid_container] + perspective_images + perspective_reports + [wcag_comparison_output]
+
+    # 2b. Clickable example screenshot row (pre-loaded, zero file I/O)
+    with gr.Row():
+        gr.Markdown('**Or click an example screenshot to load it instantly:**', scale=1)
+    with gr.Row():
+        for _fname in _EXAMPLE_FILENAMES:
+            if _fname in _EXAMPLE_IMAGES:
+                _btn = gr.Button(
+                    value=f"📷 {_fname}",
+                    scale=1,
+                    min_width=140,
+                )
+                _btn.click(
+                    fn=lambda key=_fname: handle_example_click(key),
+                    outputs=upload_outputs,
+                )
+
     file_input.change(
         fn=handle_file_upload,
         inputs=file_input,

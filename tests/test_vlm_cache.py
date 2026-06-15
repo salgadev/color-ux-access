@@ -222,7 +222,7 @@ class TestFormatWcagReportFormatting:
             "passes": True,
         }
         report = format_wcag_report(result)
-        assert "### VLM perception" in report
+        assert "👁️ VLM perception:" in report
         assert "Most text is readable" in report
         perception_pos = report.index("VLM perception")
         assessment_pos = report.index("WCAG-style assessment")
@@ -330,3 +330,80 @@ class TestFormatWcagReportFormatting:
         report = format_wcag_report(result)
         assert "**Summary:**" in report
         assert "1 critical issue found" in report
+
+
+class TestCacheBugFix:
+    """Verify error results are NOT cached so clicking Analyze retries."""
+
+    def test_error_not_cached_in_per_perspective_cache(self):
+        """analyze_single_perspective should not cache results with 'error' key."""
+        from unittest.mock import patch
+        from app import analyze_single_perspective, _vlm_cache
+        from PIL import Image
+
+        _vlm_cache.clear()
+        img = Image.new('RGB', (100, 50), color='red')
+
+        with patch('app._call_minicpm_endpoint') as mock:
+            mock.return_value = {"error": "Timed out", "findings": [], "passes": False}
+            result = analyze_single_perspective(img, "Protanopia (red-blind)")
+
+            assert "error" in result
+            # Cache should be empty — nothing valid was stored
+            assert len(_vlm_cache) == 0, "Error result must not be cached"
+
+    def test_valid_result_still_cached(self):
+        """Valid (non-error) results should still be cached normally."""
+        from unittest.mock import patch
+        from app import analyze_single_perspective, _vlm_cache
+        from PIL import Image
+
+        _vlm_cache.clear()
+        img = Image.new('RGB', (100, 50), color='blue')
+
+        with patch('app._call_minicpm_endpoint') as mock:
+            mock.return_value = {"perception_summary": "OK.", "findings": [],
+                                  "summary": "Clean", "passes": True}
+            result = analyze_single_perspective(img, "Protanopia (red-blind)")
+
+            assert "error" not in result
+            # Should be cached
+            assert len(_vlm_cache) > 0, "Valid result must be cached"
+
+            # Second call should use cache, not call VLM again
+            mock.return_value = {"perception_summary": "DIFFERENT", "findings": [],
+                                  "summary": "Changed", "passes": False}
+            result2 = analyze_single_perspective(img, "Protanopia (red-blind)")
+
+            # Should still return the first (cached) result
+            assert result2["summary"] == "Clean"
+
+    def test_merged_cache_clears_stale_error(self):
+        """analyze_all_perspectives_with_cache should clear stale error from merged cache."""
+        from unittest.mock import patch
+        from app import (analyze_all_perspectives_with_cache,
+                         _vlm_merged_cache, _vlm_cache)
+        from PIL import Image
+
+        _vlm_cache.clear()
+        _vlm_merged_cache.clear()
+
+        img = Image.new('RGB', (100, 50), color='green')
+        cvd_grid = [(img, "Normal vision (original design)")]
+
+        # Seed the merged cache with a stale error
+        from app import _get_merged_cache_key
+        bad_key = _get_merged_cache_key(img)
+        _vlm_merged_cache[bad_key] = {"error": "Stale timeout", "findings": [], "passes": False}
+
+        with patch('app._call_minicpm_endpoint') as mock:
+            mock.return_value = {"perception_summary": "OK.", "findings": [],
+                                  "summary": "Clean", "passes": True}
+            result = analyze_all_perspectives_with_cache(cvd_grid)
+
+            # Should have retried and returned fresh result, not the stale error
+            assert "error" not in result
+            assert result["passes"] is True
+            # Stale error should be gone from cache
+            assert bad_key not in _vlm_merged_cache or \
+                   "error" not in _vlm_merged_cache.get(bad_key, {})
