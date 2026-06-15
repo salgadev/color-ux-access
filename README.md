@@ -122,15 +122,16 @@ Test steps: upload `tests/fixtures/UR.webp` → click **Analyze** → verify the
 
 ## Sponsor Prize Eligibility
 
-| Sponsor | Prize | Status |
-|---------|-------|--------|
-| HuggingFace | $15,000 | ✅ Eligible — top project |
-| OpenBMB (MiniCPM-V 4.6 swap) | $10,000 | 🔲 One-line model swap |
-| Modal | $250 credits | ✅ Already deployed |
-| Cohere | Prize support | ✅ Using aya-vision-32b |
-| NVIDIA RTX 5080 ×2 | GPUs | ⚠️ Confirm Nemotron req |
+| Sponsor                 | Prize | Status                   |
+|-------------------------|-------|--------------------------|
+| HuggingFace             | $15,000 | ✅ Eligible — top project |
+| OpenBMB (MiniCPM-V 4.6) | $10,000 | ✅ Already deployed       |
+| Modal                   | $250 credits | ✅ Already deployed       |
 
-**Required:** Demo video + social media post. See `docs/EVALUATION.md` for full matrix and bonus quests.
+**Required:** 
+- ✅ Gradio App: (Space)[https://huggingface.co/spaces/build-small-hackathon/color-ux-access]
+- ✅ Demo video: (YouTube)[https://www.youtube.com/watch?v=ynwuZNcqRtY] 
+- ✅ Social Media Post: [LinkedIn](https://www.linkedin.com/posts/salgadev_build-small-hackathon-build-small-hackathon-share-7472421346992476161--5sG/)
 
 ---
 
