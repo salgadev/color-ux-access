@@ -1,7 +1,7 @@
 [project]
 name = "color-ux-access"
 version = "0.1.0"
-description = "CVD accessibility audit: screenshot → 10-type colorblind simulation → WCAG 2.1 report via 32B VLM"
+description = "CVD accessibility audit: screenshot → 10-type colorblind simulation → WCAG 2.1 report via MiniCPM-v-4.6"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}

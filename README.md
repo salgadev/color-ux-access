@@ -19,7 +19,11 @@ tags:
 
 **HF Build Small Hackathon** · Track: Backyard AI · ≤32B parameters · Gradio + HF Space
 
-> 🔍 Test any webpage screenshot for colorblind accessibility issues — 10 CVD simulations + WCAG 2.1 report via 32B VLM.
+[![HF Space](https://img.shields.io/badge/%F0%9F%A4%97-Space-blue)](https://huggingface.co/spaces/build-small-hackathon/color-ux-access)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+
+> 🔍 Test any webpage screenshot for colorblind accessibility issues — 8 CVD simulations + WCAG 2.1 report via MiniCPM-v-4.6.
 
 **Live:** [salgadev-color-ux-access.hf.space](https://salgadev-color-ux-access.hf.space)
 **Code:** [github.com/salgadev/color-ux-access](https://github.com/salgadev/color-ux-access)
@@ -33,16 +37,17 @@ tags:
 Screenshot (file upload or URL capture)
        │
        ▼
-Stage 1: CVD Simulation (CPU) — 10 variants via DaltonLens
+Stage 1: CVD Simulation (CPU) — 8 variants via DaltonLens
        │
        ▼
-Stage 2: VLM Inference (GPU) — CohereLabs/aya-vision-32b → WCAG 2.1 JSON
+Stage 2: VLM Inference (GPU) — MiniCPM-v-4.6 via Modal → WCAG 2.1 JSON
        │
        ▼
 Stage 3: WCAG Report — Severity · Criterion · Description · Remediation
 ```
 
-**VLM:** [CohereLabs/aya-vision-32b](https://huggingface.co/CohereLabs/aya-vision-32b) via HF Router (OpenAI-compatible API).
+**VLM:** [MiniCPM-v-4.6](https://huggingface.co/openbmb/MiniCPM-V-4_6) (~4B params) served via Modal GPU endpoint.
+**Endpoint:** Configured via `MODAL_INFERENCE_URL` environment variable.
 **CVD:** 10 types via DaltonLens (Machado2009, Vienot1999, Brettel1997) + Rec.709 grayscale for achromatopsia.
 
 See `docs/ARCHITECTURE.md` for detailed pipeline internals.
@@ -50,6 +55,9 @@ See `docs/ARCHITECTURE.md` for detailed pipeline internals.
 ---
 
 ## CVD Types Supported
+
+<details>
+<summary><b>10 variants — click to expand</b></summary>
 
 | Type | Description | Prevalence |
 |------|-------------|-----------|
@@ -63,6 +71,8 @@ See `docs/ARCHITECTURE.md` for detailed pipeline internals.
 | Severe Protanopia | Full red-deficient | — |
 | Achromatopsia | Complete grayscale | ~0.003% |
 | Achromatomaly | Partial grayscale | rare |
+
+</details>
 
 ---
 
@@ -85,7 +95,7 @@ source .venv/Scripts/activate
 uv pip install -e ".[dev]"
 cp .env.example .env   # add HF_TOKEN
 pytest -m smoke         # verify setup
-python app/app.py       # launch locally
+uv run app.py           # launch locally
 ```
 
 See `docs/DEVELOPMENT.md` for full setup, dependency groups, and git workflow.
@@ -125,22 +135,27 @@ Test steps: upload `tests/fixtures/UR.webp` → click **Analyze** → verify the
 
 ---
 
-## Sponsor Prize Eligibility
+## Prize Eligibility
 
-| Sponsor                 | Prize | Status                   |
-|-------------------------|-------|--------------------------|
-| HuggingFace             | $15,000 | ✅ Eligible — top project |
-| OpenBMB (MiniCPM-V 4.6) | $10,000 | ✅ Already deployed       |
-| Modal                   | $250 credits | ✅ Already deployed       |
+| Sponsor / Category       | Prize                         | Status                             |
+|--------------------------|-------------------------------|------------------------------------|
+| HuggingFace              | $15,000 cash prize pool       | ✅ Eligible — top project           |
+| OpenBMB (MiniCPM-V 4.6)  | $2,500               | ✅ Already deployed                 |
+| Modal                    | $10,000 credits               | ✅ Already deployed                 |
+| 🐜 Tiny Titan            |  (1500)  | ✅ Eligible (≤ 4B parameters model) |
+| 🎴 Judges' Wildcard      | $1,000                        | ✅ Eligible                         |
+| 🎬 Best Demo             | $1,000                        | ✅ Eligible                         |
 
-**Required:** 
+**Required**
 - ✅ Gradio App: (Space)[https://huggingface.co/spaces/build-small-hackathon/color-ux-access]
 - ✅ Demo video: (YouTube)[https://www.youtube.com/watch?v=ynwuZNcqRtY] 
 - ✅ Social Media Post: [LinkedIn](https://www.linkedin.com/posts/salgadev_build-small-hackathon-build-small-hackathon-share-7472421346992476161--5sG/)
-
 ---
 
 ## Environment
+
+<details>
+<summary><b>uv install groups</b></summary>
 
 Use `uv` for isolated venvs — prevents Hermes Agent interference. Install via pyproject.toml groups:
 
@@ -151,24 +166,32 @@ uv pip install -e ".[space]"   # + gradio, spaces, torch (for HF Space)
 uv pip install -e ".[all]"     # everything
 ```
 
+</details>
+
 ## Examples
-VLM should come to similar conclusions than the sources.  
 
-## form_validation.png
-Errors being conveyed using color: 
-Another common scenario is when errors are identified on a page. Any page that has form fields is enabled with a validation mechanism to see if the form field input has the information to meet the form’s requirements. When that doesn’t happen, the form fields must display the errors so that the user is given the context and information to correct the error and submit the form.
-[source](https://deque.com)
+### Form Validation (`form_validation.png`)
 
-## amongos.jpg
-The standard palette is fundamentally unplayable without the color-blind mode, as critical distinctions like red/green, blue/purple, and cyan/white vanish under their specific vision conditions. The ultimate takeaway is that without inclusive design features like the available color-blind mode, the game’s core social deduction mechanics fail for a substantial portion of its global audience.
-[source](https://uxdesign.cc/the-importance-of-colorblind-friendly-design-case-study-among-us-dcd042c87b9)
+Errors being conveyed using color alone:
 
+Any page with form fields uses validation to check if input meets requirements. When it doesn't, the fields must display errors so the user is given context to correct and resubmit. If color is the only indicator, colorblind users miss these cues entirely.
 
-## online_users.webp
-If color is the only thing changing, it’s inaccessible. These indicators look the same to many colorblind people, making them virtually useless.
-[source](https://medium.com/queer-design-club/going-beyond-color-9d3830559e10)
+[Source: deque.com](https://deque.com)
+
+### Among Us UI (`amongos.jpg`)
+
+The standard palette is fundamentally unplayable without color-blind mode — critical distinctions like red/green, blue/purple, and cyan/white vanish under specific vision conditions. Without inclusive design features like the available color-blind mode, the core social deduction mechanics fail for a substantial portion of the global audience.
+
+[Source: uxdesign.cc](https://uxdesign.cc/the-importance-of-colorblind-friendly-design-case-study-among-us-dcd042c87b9)
+
+### Status Indicators (`online_users.webp`)
+
+If color is the only thing changing, it's inaccessible. These indicators look the same to many colorblind people, making them virtually useless.
+
+[Source: Medium / Queer Design Club](https://medium.com/queer-design-club/going-beyond-color-9d3830559e10)
 
 ## Resources
-https://www.smashingmagazine.com/2024/02/designing-for-colorblindness/
+
+- [Smashing Magazine: Designing for Colorblindness](https://www.smashingmagazine.com/2024/02/designing-for-colorblindness/)
 
 
